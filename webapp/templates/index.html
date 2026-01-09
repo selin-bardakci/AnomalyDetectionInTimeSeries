@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHRONOS.AI - Advanced Anomaly Detection Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 3L8 8L12 4L16 8L21 3" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3 12L8 17L12 13L16 17L21 12" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="logo-text">CHRONOS<span class="logo-ai">.AI</span></span>
+            </div>
+            <div class="nav-links">
+                <a href="/">Documentation</a>
+                <a href="/">Datasets</a>
+                <a href="/">Model Zoo</a>
+                <a href="/">Benchmark</a>
+                <a href="/training" class="btn-deploy">Deploy Model</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                Advanced <span class="gradient-text">Anomaly<br>Detection</span> Platform
+            </h1>
+            <p class="hero-subtitle">
+                Train and evaluate industrial-grade models including <strong>iTransformer</strong>, <strong>1D-CNN</strong>, 
+                and <strong>LSTM</strong> for seismic and financial forecasting. Detect rare events before they 
+                become critical.
+            </p>
+            <div class="hero-buttons">
+                <a href="/training" class="btn btn-primary">Get Started</a>
+                <a href="#demo" class="btn btn-secondary">Watch Demo</a>
+            </div>
+        </div>
+        
+        <div class="hero-visual">
+            <canvas id="timeSeriesCanvas"></canvas>
+            <div class="stats-panel">
+                <div class="stat-item">
+                    <div class="stat-label">AI Time Series</div>
+                    <div class="stat-value">247 TK</div>
+                    <div class="stat-change">+41 kr</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Prediction Ticketing</div>
+                    <div class="stat-value">202K</div>
+                    <div class="stat-change">+58 kr</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Prediction</div>
+                    <div class="stat-change">+20 kr</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Prediction</div>
+                    <div class="stat-change">+52 kr</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Prediction Ticketing</div>
+                    <div class="stat-change">+77 kr</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='js/home.js') }}"></script>
+</body>
+</html>

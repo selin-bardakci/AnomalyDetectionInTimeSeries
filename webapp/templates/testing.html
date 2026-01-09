@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Inference - CHRONOS.AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 3L8 8L12 4L16 8L21 3" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3 12L8 17L12 13L16 17L21 12" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="logo-text">CHRONOS<span class="logo-ai">.AI</span></span>
+            </div>
+            <div class="nav-links">
+                <a href="/">Documentation</a>
+                <a href="/">Datasets</a>
+                <a href="/">Model Zoo</a>
+                <a href="/training">Benchmark</a>
+                <a href="/training" class="btn-deploy">Deploy Model</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <!-- Model Selection -->
+            <div class="sidebar-section">
+                <div class="option-card selected" data-test-model="cnn">
+                    <div class="option-icon">◻️</div>
+                    <div class="option-content">
+                        <div class="option-name">1D-CNN</div>
+                    </div>
+                </div>
+                <div class="option-card" data-test-model="lstm">
+                    <div class="option-icon">🔄</div>
+                    <div class="option-content">
+                        <div class="option-name">LSTM</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hyperparameters -->
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">HYPERPARAMETERS</h3>
+                
+                <div class="param-group">
+                    <label class="param-label">Learning Rate</label>
+                    <input type="range" class="slider" id="learningRate" min="0.0001" max="0.01" step="0.0001" value="0.001">
+                    <div class="param-value" id="learningRateValue">0.001</div>
+                </div>
+
+                <div class="param-group">
+                    <label class="param-label">Look-back Window</label>
+                    <select class="dropdown" id="lookbackWindow">
+                        <option value="64">64 steps</option>
+                        <option value="100" selected>100 steps</option>
+                        <option value="128">128 steps</option>
+                        <option value="256">256 steps</option>
+                    </select>
+                </div>
+
+                <div class="param-group">
+                    <label class="param-label">Threshold Percentile</label>
+                    <select class="dropdown" id="thresholdPercentile">
+                        <option value="95">95th percentile</option>
+                        <option value="97" selected>97th percentile</option>
+                        <option value="99">99th percentile</option>
+                    </select>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content-full">
+            <div class="content-header">
+                <div>
+                    <h1 class="page-title">Test Inference & Results</h1>
+                    <p class="page-subtitle">
+                        Upload test data from your laptop or use existing project data.
+                    </p>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn-use-existing" id="useExistingData" title="Use project test data">
+                        <span>📂 Use Project Data</span>
+                    </button>
+                    <label for="testFile" class="btn-upload">
+                        <span>📁 Upload .csv/.npz</span>
+                        <input type="file" id="testFile" accept=".csv,.npz" hidden>
+                    </label>
+                    <button class="btn-run" id="runPrediction">
+                        <span class="search-icon">🔍</span> Run Prediction
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Chart -->
+            <div class="chart-container-full">
+                <div class="chart-header">
+                    <h3>Time Series Analysis: Magnitude (M) / Price ($)</h3>
+                    <div class="chart-legend">
+                        <span class="legend-item">
+                            <span class="legend-box" style="background: transparent; border: 2px solid #888;"></span> Signal
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-box" style="background: rgba(239, 68, 68, 0.3);"></span> Anomaly Region
+                        </span>
+                    </div>
+                </div>
+                <canvas id="anomalyChart"></canvas>
+            </div>
+
+            <!-- Metrics Summary -->
+            <div class="metrics-grid" id="metricsGrid" style="display: none;">
+                <div class="metric-box">
+                    <div class="metric-label">True Positives</div>
+                    <div class="metric-value green" id="tpValue">--</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">False Positives</div>
+                    <div class="metric-value red" id="fpValue">--</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Precision</div>
+                    <div class="metric-value" id="precisionValue">--</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Recall</div>
+                    <div class="metric-value" id="recallValue">--</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">F1-Score</div>
+                    <div class="metric-value" id="f1TestValue">--</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">ROC AUC</div>
+                    <div class="metric-value" id="aucTestValue">--</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/testing.js') }}"></script>
+</body>
+</html>

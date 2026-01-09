@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Training Laboratory - CHRONOS.AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 3L8 8L12 4L16 8L21 3" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3 12L8 17L12 13L16 17L21 12" stroke="#4A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="logo-text">CHRONOS<span class="logo-ai">.AI</span></span>
+            </div>
+            <div class="nav-links">
+                <a href="/">Documentation</a>
+                <a href="/">Datasets</a>
+                <a href="/">Model Zoo</a>
+                <a href="/">Benchmark</a>
+                <a href="/testing" class="btn-deploy">Deploy Model</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <!-- Dataset Selection -->
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">SELECT DATASET</h3>
+                <div class="option-card selected" data-dataset="earthquake">
+                    <div class="option-icon">🏔️</div>
+                    <div class="option-content">
+                        <div class="option-name">Earthquake Data</div>
+                        <div class="option-desc">Seismic magnitudes & PSD</div>
+                    </div>
+                </div>
+                <div class="option-card" data-dataset="financial">
+                    <div class="option-icon">📊</div>
+                    <div class="option-content">
+                        <div class="option-name">Financial Market</div>
+                        <div class="option-desc">S&P 500 Daily Volatility</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Architecture -->
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">MODEL ARCHITECTURE</h3>
+                <!-- Earthquake Models -->
+                <div class="option-card selected earthquake-model" data-model="itransformer" data-dataset="earthquake">
+                    <div class="option-icon">⭕</div>
+                    <div class="option-content">
+                        <div class="option-name">iTransformer <span class="badge-sota">SOTA</span></div>
+                    </div>
+                </div>
+                <div class="option-card earthquake-model" data-model="cnn" data-dataset="earthquake">
+                    <div class="option-icon">◻️</div>
+                    <div class="option-content">
+                        <div class="option-name">1D-CNN</div>
+                    </div>
+                </div>
+                <div class="option-card earthquake-model" data-model="lstm" data-dataset="earthquake">
+                    <div class="option-icon">🔄</div>
+                    <div class="option-content">
+                        <div class="option-name">LSTM</div>
+                    </div>
+                </div>
+                <!-- Financial Models -->
+                <div class="option-card financial-model" data-model="cnn" data-dataset="financial" style="display: none;">
+                    <div class="option-icon">◻️</div>
+                    <div class="option-content">
+                        <div class="option-name">1D-CNN</div>
+                    </div>
+                </div>
+                <div class="option-card financial-model" data-model="lstm" data-dataset="financial" style="display: none;">
+                    <div class="option-icon">🔄</div>
+                    <div class="option-content">
+                        <div class="option-name">LSTM</div>
+                    </div>
+                </div>
+                <div class="option-card financial-model" data-model="gru" data-dataset="financial" style="display: none;">
+                    <div class="option-icon">🔁</div>
+                    <div class="option-content">
+                        <div class="option-name">GRU</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Financial Dataset Selection (shown only for financial) -->
+            <div class="sidebar-section" id="financialDatasetSection" style="display: none;">
+                <h3 class="sidebar-title">FINANCIAL DATASET</h3>
+                <div class="option-card selected" data-financial-dataset="tsla">
+                    <div class="option-icon">📈</div>
+                    <div class="option-content">
+                        <div class="option-name">TSLA Pandemic</div>
+                        <div class="option-desc">2019-2021 (740 days)</div>
+                    </div>
+                </div>
+                <div class="option-card" data-financial-dataset="yfinance">
+                    <div class="option-icon">📊</div>
+                    <div class="option-content">
+                        <div class="option-name">Multi-Stock</div>
+                        <div class="option-desc">AAPL hourly (5168 records)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Training Info -->
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">TRAINING DATA</h3>
+                <div class="training-info">
+                    <div class="info-item">
+                        <span class="info-label">Source:</span>
+                        <span class="info-value">trainData/</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Earthquake:</span>
+                        <span class="info-value">z_channel_train.pkl</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Window Size:</span>
+                        <span class="info-value">128 samples</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Max Traces:</span>
+                        <span class="info-value">4000</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="content-header">
+                <div>
+                    <h1 class="page-title">
+                        Training Laboratory 
+                        <span class="badge-optimized" id="statusBadge">READY</span>
+                    </h1>
+                    <p class="page-subtitle" id="trainingSubtitle">
+                        Select dataset and model architecture, then start training.
+                    </p>
+                </div>
+                <button class="btn-trained" id="trainButton">
+                    <span class="check-icon">✓</span> Start Training
+                </button>
+            </div>
+
+            <!-- Training Loss Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>TRAINING & VALIDATION LOSS</h3>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-dot" style="background: #4A90E2;"></span> Train</span>
+                        <span class="legend-item"><span class="legend-dot" style="background: #2DD4BF;"></span> Val</span>
+                    </div>
+                </div>
+                <canvas id="lossChart"></canvas>
+            </div>
+
+            <!-- Test Inference & Results Section -->
+            <div class="experiment-section" style="margin-top: 2rem;">
+                <div class="section-header">
+                    <h2>🧪 Test Inference & Results</h2>
+                    <p style="opacity: 0.7; font-size: 0.9rem;">Evaluate trained model on test dataset</p>
+                </div>
+
+                <div class="test-controls">
+                    <div class="control-group">
+                        <label>Model Source</label>
+                        <div class="model-source-toggle">
+                            <button class="source-btn active" data-source="user">User Trained</button>
+                            <button class="source-btn" data-source="pretrained">Pretrained</button>
+                        </div>
+                        <p class="model-status" id="modelStatus">Checking model availability...</p>
+                    </div>
+
+                    <div class="control-group">
+                <label>Threshold Method</label>
+                <select id="thresholdMethodSelect" class="threshold-method-select">
+                    <option value="youden">ROC-Optimal (Youden's J) - Best Balance</option>
+                    <option value="f1">F1-Score Optimization</option>
+                    <option value="mcc">MCC Optimization</option>
+                    <option value="percentile" selected>Percentile Noise Threshold</option>
+                    <option value="custom">Custom Threshold Value</option>
+                </select>
+                <p class="threshold-info" id="thresholdInfo">
+                    Youden's J maximizes (TPR - FPR) for optimal balance between true and false positives
+                </p>
+            </div>
+
+            <div class="control-group" id="percentileGroup">
+                <label for="thresholdSlider">Percentile Level (p90–p99)</label>
+                <div class="threshold-control">
+                    <input type="range" id="thresholdSlider" min="90" max="99" value="95" step="1">
+                    <span class="threshold-value" id="thresholdValue">p95</span>
+                </div>
+                <p style="opacity: 0.6; font-size: 0.85rem; margin-top: 0.5rem;">
+                    Higher percentiles = fewer false alarms, but may miss some earthquakes
+                </p>
+            </div>
+
+            <div class="control-group" id="customGroup" style="display: none;">
+                <label for="customThreshold">Custom Threshold Value</label>
+                <input type="number" id="customThreshold" class="custom-threshold-input" 
+                       placeholder="Enter threshold (e.g., 0.0001)" step="0.0000001" min="0">
+                <p style="opacity: 0.6; font-size: 0.85rem; margin-top: 0.5rem;">
+                    Enter reconstruction error threshold manually
+                    </div>
+
+                    <button class="btn-test-inference" id="runTestButton">
+                        <span class="btn-icon">🧪</span>
+                        <span class="btn-text">Run Test Inference</span>
+                        <span class="btn-arrow">→</span>
+                    </button>
+                </div>
+
+                <!-- Test Results Display -->
+                <div class="test-results" id="testResults" style="display: none;">
+                    <h3 style="margin-bottom: 1.5rem; color: #4A90E2;">Test Results</h3>
+                    
+                    <!-- Metrics Grid -->
+                    <div class="test-metrics-grid">
+                        <div class="test-metric-card">
+                            <div class="test-metric-label">AUC Score</div>
+                            <div class="test-metric-value" id="testAUC">--</div>
+                        </div>
+                        <div class="test-metric-card">
+                            <div class="test-metric-label">Accuracy</div>
+                            <div class="test-metric-value" id="testAccuracy">--</div>
+                        </div>
+                        <div class="test-metric-card">
+                            <div class="test-metric-label">Precision</div>
+                            <div class="test-metric-value" id="testPrecision">--</div>
+                        </div>
+                        <div class="test-metric-card">
+                            <div class="test-metric-label">Recall</div>
+                            <div class="test-metric-value" id="testRecall">--</div>
+                        </div>
+                        <div class="test-metric-card">
+                            <div class="test-metric-label">F1 Score</div>
+                            <div class="test-metric-value" id="testF1">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Confusion Matrix Stats -->
+                    <div class="confusion-stats">
+                        <div class="stat-item"><span class="stat-label">True Positives:</span> <span id="testTP">--</span></div>
+                        <div class="stat-item"><span class="stat-label">False Positives:</span> <span id="testFP">--</span></div>
+                        <div class="stat-item"><span class="stat-label">True Negatives:</span> <span id="testTN">--</span></div>
+                        <div class="stat-item"><span class="stat-label">False Negatives:</span> <span id="testFN">--</span></div>
+                    </div>
+
+                    <!-- Visualization Plots -->
+                    <div class="test-plots">
+                        <div class="plot-container">
+                            <h4>ROC Curve</h4>
+                            <img id="rocPlot" src="" alt="ROC Curve" style="width: 100%; border-radius: 8px;">
+                        </div>
+                        <div class="plot-container">
+                            <h4>Confusion Matrix</h4>
+                            <img id="confusionPlot" src="" alt="Confusion Matrix" style="width: 100%; border-radius: 8px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Panel - Metrics -->
+        <aside class="metrics-panel">
+            <div class="metric-card">
+                <div class="metric-label">EPOCH</div>
+                <div class="metric-value" id="epochValue">0/50</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">LOSS (VAL)</div>
+                <div class="metric-value blue" id="valLossValue">---</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">ACCURACY (AUC)</div>
+                <div class="metric-value" id="aucValue">--</div>
+                <div class="metric-bar">
+                    <div class="metric-bar-fill" id="aucBar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">F1-SCORE</div>
+                <div class="metric-value blue" id="f1Value">--</div>
+                <div class="metric-bar">
+                    <div class="metric-bar-fill blue" id="f1Bar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">INFERENCE LATENCY</div>
+                <div class="metric-value yellow" id="latencyValue">--</div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/training.js') }}"></script>
+</body>
+</html>
