@@ -193,11 +193,14 @@ def train_model():
     data = request.json
     model_type = data.get('model_type', 'cnn')
     dataset_type = data.get('dataset_type', 'earthquake')
-    financial_dataset = data.get('financial_dataset', 'tsla')  # 'tsla' or 'yfinance'
+    financial_dataset = data.get('financial_dataset', 'tsla')  # For backward compatibility
+    stock_ticker = data.get('stock_ticker', 'TSLA')  # Stock symbol
+    start_date = data.get('start_date', '2019-01-01')  # Training start date
+    end_date = data.get('end_date', '2021-12-31')  # Training end date
     
-    # For financial data, we don't use the hardcoded path - we load CSV directly
+    # For financial data, we don't use the hardcoded path - we fetch dynamically
     if dataset_type == 'financial':
-        training_data_path = None  # Will be handled in prepare_financial_data_from_csv
+        training_data_path = None  # Will be fetched via yfinance
     else:
         # Get training data path from hardcoded sources for earthquake data
         if dataset_type not in TRAINING_DATA_SOURCES:
@@ -215,8 +218,10 @@ def train_model():
     # Hyperparameters
     lookback = int(data.get('lookback', 128))
     learning_rate = float(data.get('learning_rate', 0.001))
-    epochs = int(data.get('epochs', 50))
-    batch_size = int(data.get('batch_size', 256))
+    # Default epochs: CNN=80, others=50 (matching pipeline)
+    default_epochs = 80 if model_type == 'cnn' else 50
+    epochs = int(data.get('epochs', default_epochs))
+    batch_size = int(data.get('batch_size', 32))  # Pipeline default: 32
     
     # Initialize training state
     training_state['is_training'] = True
@@ -231,7 +236,7 @@ def train_model():
     # Start training in background thread
     thread = threading.Thread(
         target=train_model_background,
-        args=(training_data_path, model_type, dataset_type, lookback, learning_rate, epochs, batch_size, financial_dataset)
+        args=(training_data_path, model_type, dataset_type, lookback, learning_rate, epochs, batch_size, financial_dataset, stock_ticker, start_date, end_date)
     )
     thread.daemon = True
     thread.start()
@@ -245,7 +250,7 @@ def train_model():
     })
 
 
-def train_model_background(training_data_path, model_type, dataset_type, lookback, learning_rate, epochs, batch_size, financial_dataset='tsla'):
+def train_model_background(training_data_path, model_type, dataset_type, lookback, learning_rate, epochs, batch_size, financial_dataset='tsla', stock_ticker='TSLA', start_date='2019-01-01', end_date='2021-12-31'):
     """Background training function"""
     global training_state
     
@@ -264,8 +269,8 @@ def train_model_background(training_data_path, model_type, dataset_type, lookbac
         
         # Handle financial vs earthquake data differently
         if dataset_type == 'financial':
-            # Financial data: load from selected CSV file
-            train_scaled, test_scaled, window = prepare_financial_data_from_csv(financial_dataset, lookback=32)
+            # Financial data: fetch dynamically via yfinance
+            train_scaled, test_scaled, window = prepare_financial_data_dynamic(stock_ticker, start_date, end_date, lookback=32)
             
             # Create windows for forecasting
             X_train, y_train = make_windows_multifeat(train_scaled, window, target_col=0)
@@ -357,7 +362,7 @@ def train_model_background(training_data_path, model_type, dataset_type, lookbac
         
         early_stop = EarlyStopping(
             monitor='val_loss',
-            patience=10,
+            patience=5,  # Pipeline default: 5
             restore_best_weights=True,
             verbose=0
         )
@@ -379,6 +384,96 @@ def train_model_background(training_data_path, model_type, dataset_type, lookbac
         print(f"Final validation loss: {history.history['val_loss'][-1]:.6f}")
         print(f"Model saved to: {model_filename}")
         print(f"{'='*60}\n")
+        
+        # For financial data, save anomaly detection artifacts
+        if dataset_type == 'financial':
+            print(f"\n📊 Computing anomaly detection artifacts...")
+            
+            # 1) Compute residuals
+            yhat_tr = model.predict(X_train, verbose=0).ravel()
+            yhat_te = model.predict(X_test, verbose=0).ravel()
+            res_tr = np.abs(y_train - yhat_tr)
+            res_te = np.abs(y_test - yhat_te)
+            
+            print(f"   ✓ Residuals computed - Train: {res_tr.mean():.6f}, Test: {res_te.mean():.6f}")
+            
+            # 2) Save test data metadata for inference
+            test_metadata = {
+                'window': 32,
+                'n_test_samples': len(y_test),
+                'split_ratio': 0.7,
+                'features': FEATURES,
+                'model_type': model_type,
+                'dataset': financial_dataset
+            }
+            
+            metadata_path = f'models/{model_type}_financial_{financial_dataset}_meta.json'
+            with open(metadata_path, 'w') as f:
+                json.dump(test_metadata, f, indent=2)
+            print(f"   ✓ Metadata saved to {metadata_path}")
+            
+            # 3) Compute MAD threshold from training residuals
+            # Need to normalize residuals by volatility first
+            # Load original data to get rolling_std_30
+            csv_files = {
+                'tsla': 'trainData/TSLA_2019-2021_pandemic.csv',
+                'yfinance': 'trainData/yfinance_clean.csv'
+            }
+            csv_path = csv_files.get(financial_dataset, csv_files['tsla'])
+            
+            if financial_dataset == 'tsla':
+                df_orig = pd.read_csv(csv_path, header=0)
+                df_orig = df_orig.iloc[1:].reset_index(drop=True)
+                df_orig = df_orig.rename(columns={'Price': 'Date'})
+                df_orig['Date'] = pd.to_datetime(df_orig['Date'], errors='coerce')
+                df_orig['Close'] = pd.to_numeric(df_orig['Close'], errors='coerce')
+                df_orig = df_orig[['Date', 'Close']].dropna().reset_index(drop=True)
+            else:
+                df_orig = pd.read_csv(csv_path)
+                df_orig['Datetime'] = pd.to_datetime(df_orig['Datetime'])
+                df_orig = df_orig.rename(columns={'Datetime': 'Date'})
+                df_orig = df_orig[['Date', 'Close']].dropna().reset_index(drop=True)
+            
+            # Recompute features
+            df_orig["log_return"] = np.log(df_orig["Close"] / df_orig["Close"].shift(1))
+            df_orig["rolling_std_30"] = df_orig["log_return"].rolling(30).std()
+            df_orig = df_orig.dropna().reset_index(drop=True)
+            
+            split_idx_orig = int(len(df_orig) * 0.7)
+            std30_train = df_orig["rolling_std_30"].values[:split_idx_orig]
+            std30_train = std30_train[32:]  # Skip window
+            
+            # Normalize residuals
+            norm_res_tr = res_tr / (std30_train + 1e-8)
+            
+            # Compute MAD threshold (k=2.5)
+            def mad_threshold(residuals, k=2.5):
+                med = np.median(residuals)
+                mad = np.median(np.abs(residuals - med)) + 1e-12
+                return med + k * 1.4826 * mad
+            
+            thr = mad_threshold(norm_res_tr, k=2.5)
+            
+            # Save threshold
+            threshold_path = f'models/{model_type}_financial_{financial_dataset}_threshold.txt'
+            with open(threshold_path, 'w') as f:
+                f.write(str(thr))
+            print(f"   ✓ MAD Threshold (k=2.5): {thr:.8f}")
+            print(f"   ✓ Threshold saved to {threshold_path}")
+            
+            # Save recommended parameters
+            anomaly_params = {
+                'mad_k': 2.5,
+                'stress_percentile': 90,
+                'threshold_value': float(thr),
+                'anomaly_method': 'residual + stress + MAD'
+            }
+            
+            params_path = f'models/{model_type}_financial_{financial_dataset}_params.json'
+            with open(params_path, 'w') as f:
+                json.dump(anomaly_params, f, indent=2)
+            print(f"   ✓ Anomaly params saved to {params_path}")
+            print(f"\n{'='*60}\n")
         
         training_state['is_training'] = False
         training_state['progress'] = 100
@@ -660,6 +755,62 @@ def prepare_financial_data_from_csv(dataset_name, lookback=32):
     return train_scaled, test_scaled, lookback
 
 
+def prepare_financial_data_dynamic(stock_ticker, start_date, end_date, lookback=32):
+    """Fetch and prepare financial data dynamically via yfinance"""
+    import yfinance as yf
+    
+    print(f"📊 Fetching data for {stock_ticker} from {start_date} to {end_date}...")
+    
+    # Fetch data from yfinance
+    df = yf.download(stock_ticker, start=start_date, end=end_date, progress=False)
+    
+    if df.empty:
+        raise ValueError(f"No data found for {stock_ticker} in date range {start_date} to {end_date}")
+    
+    print(f"   ✓ Downloaded {len(df)} records")
+    
+    # Reset index to have Date as column
+    df = df.reset_index()
+    df = df.rename(columns={'Date': 'Date'})
+    df = df[['Date', 'Close']].dropna().reset_index(drop=True)
+    
+    print(f"   ✓ Cleaned data: {len(df)} records")
+    
+    # Feature engineering (matching pipeline)
+    print("🔧 Engineering features...")
+    df["log_return"] = np.log(df["Close"] / df["Close"].shift(1))
+    df["abs_return"] = df["log_return"].abs()
+    df["rolling_std_7"] = df["log_return"].rolling(7).std()
+    df["rolling_std_30"] = df["log_return"].rolling(30).std()
+    
+    eps = 1e-8
+    df["norm_return"] = df["log_return"] / (df["rolling_std_30"] + eps)
+    df = df.dropna().reset_index(drop=True)
+    print(f"   ✓ Features created: {len(df)} records after feature engineering")
+    
+    # Split data (70/30 train/test)
+    split_ratio = 0.7
+    split_idx = int(len(df) * split_ratio)
+    
+    FEATURES = ["norm_return", "abs_return", "rolling_std_7", "rolling_std_30"]
+    train_feat = df[FEATURES].values[:split_idx]
+    test_feat = df[FEATURES].values[split_idx:]
+    
+    # Scale features
+    print("📏 Scaling features...")
+    scaler = StandardScaler()
+    train_scaled = scaler.fit_transform(train_feat)
+    test_scaled = scaler.transform(test_feat)
+    
+    # Save scaler with stock ticker name
+    os.makedirs('models', exist_ok=True)
+    scaler_path = f'models/financial_{stock_ticker.replace("-", "_").lower()}_scaler.joblib'
+    joblib.dump(scaler, scaler_path)
+    print(f"   ✓ Scaler saved to {scaler_path}")
+    
+    return train_scaled, test_scaled, lookback
+
+
 def make_windows_multifeat(X, window, target_col=0):
     """Create windowed data for financial forecasting"""
     Xs, ys = [], []
@@ -867,6 +1018,269 @@ def build_itransformer_model(lookback=128, learning_rate=0.001):
 # TEST INFERENCE ENDPOINTS
 # ============================================================
 
+def run_financial_inference(model_type, stock_ticker, start_date, end_date, threshold_method, 
+                            mad_k, stress_percentile, custom_value, percentile):
+    """Run financial anomaly detection inference with dynamic date range"""
+    try:
+        # Load model - check user-trained first, then pretrained
+        user_trained_path = f'models/{model_type}_financial_best.keras'
+        pretrained_path = f'pretrained/{model_type}_financial_best.keras'
+        
+        if os.path.exists(user_trained_path):
+            model_path = user_trained_path
+            print(f"📂 Loading user-trained model from: {model_path}")
+        elif os.path.exists(pretrained_path):
+            model_path = pretrained_path
+            print(f"📂 Loading pretrained model from: {model_path}")
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Model not found. Please train the model first or place pretrained model in pretrained/ folder.'
+            }), 404
+        
+        model = load_model(model_path)
+        print("✅ Model loaded")
+        
+        # Load scaler (try stock-specific first, then generic)
+        scaler_path = f'models/financial_{stock_ticker.replace("-", "_").lower()}_scaler.joblib'
+        if not os.path.exists(scaler_path):
+            # Try generic scaler
+            scaler_path = 'models/financial_tsla_scaler.joblib'
+        
+        if not os.path.exists(scaler_path):
+            return jsonify({
+                'success': False,
+                'error': f'Scaler not found. Please train the model first.'
+            }), 404
+        
+        scaler = joblib.load(scaler_path)
+        print(f"✅ Scaler loaded from {scaler_path}")
+        
+        # Fetch data dynamically for test period
+        import yfinance as yf
+        print(f"📊 Fetching test data for {stock_ticker} from {start_date} to {end_date}...")
+        df = yf.download(stock_ticker, start=start_date, end=end_date, progress=False)
+        
+        if df.empty:
+            return jsonify({
+                'success': False,
+                'error': f'No data found for {stock_ticker} in date range'
+            }), 404
+        
+        # Reset index to have Date as column
+        df = df.reset_index()
+        df = df.rename(columns={'Date': 'Date'})
+        df = df[['Date', 'Close']].dropna().reset_index(drop=True)
+        
+        print(f"📊 Loaded {len(df)} records for {stock_ticker}")
+        
+        # Feature engineering
+        df["log_return"] = np.log(df["Close"] / df["Close"].shift(1))
+        df["abs_return"] = df["log_return"].abs()
+        df["rolling_std_7"] = df["log_return"].rolling(7).std()
+        df["rolling_std_30"] = df["log_return"].rolling(30).std()
+        
+        eps = 1e-8
+        df["norm_return"] = df["log_return"] / (df["rolling_std_30"] + eps)
+        df = df.dropna().reset_index(drop=True)
+        
+        # Use ALL data for testing (no split, since user selected specific date range)
+        FEATURES = ["norm_return", "abs_return", "rolling_std_7", "rolling_std_30"]
+        test_feat = df[FEATURES].values
+        test_dates = df["Date"].values
+        test_prices = df["Close"].values
+        
+        # Scale features
+        test_scaled = scaler.transform(test_feat)
+        
+        # Create windows
+        WINDOW = 32
+        X_test, y_test = make_windows_multifeat(test_scaled, WINDOW, target_col=0)
+        
+        print(f"📊 Test data: {X_test.shape}, Targets: {y_test.shape}")
+        
+        # Run predictions
+        print("🔮 Running predictions...")
+        yhat_te = model.predict(X_test, verbose=0).ravel()
+        res_te = np.abs(y_test - yhat_te)
+        
+        print(f"✅ Predictions complete - MAE: {res_te.mean():.6f}")
+        
+        # Get test dates and prices (after windowing)
+        dates_test = test_dates[WINDOW:]
+        price_test = test_prices[WINDOW:]
+        abs_ret_test = df["abs_return"].values[WINDOW:]
+        std30_test = df["rolling_std_30"].values[WINDOW:]
+        
+        # Compute stress mask
+        abs_ret_thr = np.percentile(abs_ret_test, stress_percentile)
+        stress_mask = (abs_ret_test > abs_ret_thr).astype(int)
+        
+        print(f"📊 Stress threshold (|return| {stress_percentile}th pct): {abs_ret_thr:.6f}")
+        print(f"📊 Stress day rate: {stress_mask.mean():.3f}")
+        
+        # Normalize residuals by volatility
+        norm_res_te = res_te / (std30_test + eps)
+        
+        # Determine threshold
+        if threshold_method == 'mad':
+            # Load recommended MAD threshold
+            threshold_path = f'models/{model_type}_financial_{financial_dataset}_threshold.txt'
+            if os.path.exists(threshold_path):
+                with open(threshold_path, 'r') as f:
+                    recommended_threshold = float(f.read().strip())
+                threshold = recommended_threshold
+                threshold_name = f"MAD (k={mad_k}, Recommended)"
+                print(f"📊 Using recommended MAD threshold: {threshold:.8f}")
+            else:
+                # Compute MAD from training data
+                print("⚠️ Recommended threshold not found, computing from training data...")
+                train_feat = df[FEATURES].values[:split_idx]
+                train_scaled = scaler.transform(train_feat)
+                X_train, y_train = make_windows_multifeat(train_scaled, WINDOW, target_col=0)
+                yhat_tr = model.predict(X_train, verbose=0).ravel()
+                res_tr = np.abs(y_train - yhat_tr)
+                
+                std30_train = df["rolling_std_30"].values[:split_idx]
+                std30_train = std30_train[WINDOW:]
+                norm_res_tr = res_tr / (std30_train + eps)
+                
+                def mad_threshold(residuals, k=2.5):
+                    med = np.median(residuals)
+                    mad = np.median(np.abs(residuals - med)) + 1e-12
+                    return med + k * 1.4826 * mad
+                
+                threshold = mad_threshold(norm_res_tr, k=mad_k)
+                threshold_name = f"MAD (k={mad_k}, Computed)"
+                print(f"📊 Computed MAD threshold: {threshold:.8f}")
+        elif threshold_method == 'percentile':
+            threshold = float(np.percentile(norm_res_te, percentile))
+            threshold_name = f"Percentile p{percentile}"
+        elif threshold_method == 'custom':
+            threshold = float(custom_value)
+            threshold_name = "Custom Threshold"
+        else:
+            threshold = float(np.percentile(norm_res_te, 95))
+            threshold_name = "Percentile p95 (Default)"
+        
+        print(f"📊 Selected threshold: {threshold_name} = {threshold:.8f}")
+        
+        # Apply threshold with stress mask
+        raw_anomaly = (norm_res_te > threshold).astype(int)
+        anomaly = ((norm_res_te > threshold) & (stress_mask == 1)).astype(int)
+        
+        print(f"📊 Raw anomaly rate: {raw_anomaly.mean():.3f}")
+        print(f"📊 Final anomaly rate (with stress): {anomaly.mean():.3f}")
+        print(f"📊 Anomaly count: {anomaly.sum()} / {len(anomaly)}")
+        
+        # Filter for 2021 data
+        dates_test_dt = pd.to_datetime(dates_test)
+        mask_2021 = (dates_test_dt >= "2021-01-01") & (dates_test_dt < "2022-01-01")
+        
+        dates_2021 = dates_test_dt[mask_2021]
+        price_2021 = price_test[mask_2021]
+        anomaly_2021 = anomaly[mask_2021]
+        norm_return_2021 = y_test[mask_2021]
+        
+        print(f"📊 2021 data: {len(dates_2021)} points, {anomaly_2021.sum()} anomalies")
+        
+        # Generate price vs anomaly plot
+        plt.figure(figsize=(16, 5))
+        plt.plot(dates_2021, price_2021, label="Price", linewidth=2, color='#4A90E2')
+        
+        # Mark anomalies
+        idx_2021 = np.where(anomaly_2021 == 1)[0]
+        if len(idx_2021) > 0:
+            plt.scatter(dates_2021[idx_2021], price_2021[idx_2021], 
+                       color="red", s=50, label="Anomaly", zorder=5, marker='o', edgecolors='darkred', linewidths=1.5)
+        
+        plt.title(f"Price vs Anomaly Detection ({model_type.upper()}, 2021)", fontsize=14, fontweight='bold')
+        plt.xlabel("Date", fontsize=12)
+        plt.ylabel("Price ($)", fontsize=12)
+        plt.legend(fontsize=11)
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
+        buf.seek(0)
+        price_plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        plt.close()
+        
+        # Generate norm return plot
+        plt.figure(figsize=(16, 4))
+        plt.plot(dates_2021, norm_return_2021, label="Normalized Return", alpha=0.7, linewidth=1.5, color='#64748B')
+        if len(idx_2021) > 0:
+            plt.scatter(dates_2021[idx_2021], norm_return_2021[idx_2021], 
+                       color="red", s=30, label="Anomaly", zorder=5)
+        plt.title(f"Normalized Return Anomaly Detection ({model_type.upper()})", fontsize=14, fontweight='bold')
+        plt.xlabel("Date", fontsize=12)
+        plt.ylabel("Normalized Return", fontsize=12)
+        plt.legend(fontsize=11)
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
+        buf.seek(0)
+        return_plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        plt.close()
+        
+        print(f"✅ Inference complete!")
+        print(f"{'='*60}\n")
+        
+        # Prepare chart data for frontend
+        chart_data = {
+            'dates': dates_2021.strftime('%Y-%m-%d').tolist(),
+            'prices': price_2021.tolist(),
+            'anomalies': anomaly_2021.tolist(),
+            'returns': norm_return_2021.tolist()
+        }
+        
+        return jsonify({
+            'success': True,
+            'dataset_type': 'financial',
+            'metrics': {
+                'total_samples': int(len(anomaly)),
+                'anomaly_count': int(anomaly.sum()),
+                'anomaly_rate': float(anomaly.mean()),
+                'raw_anomaly_count': int(raw_anomaly.sum()),
+                'stress_threshold': float(abs_ret_thr),
+                'threshold': float(threshold),
+                'threshold_method': threshold_method,
+                'threshold_name': threshold_name,
+                'threshold_method_params': {
+                    'k': float(mad_k),
+                    'stress_percentile': int(stress_percentile)
+                },
+                'mae': float(res_te.mean()),
+                'samples_2021': int(len(dates_2021)),
+                'anomalies_2021': int(anomaly_2021.sum())
+            },
+            'plots': {
+                'price_anomaly': f'data:image/png;base64,{price_plot_base64}',
+                'return_anomaly': f'data:image/png;base64,{return_plot_base64}'
+            },
+            'chart_data': chart_data,
+            'stats': {
+                'total_samples': int(len(y_test)),
+                'mean_residual': float(res_te.mean()),
+                'median_residual': float(np.median(res_te)),
+                'std_residual': float(res_te.std())
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error during financial inference: {error_trace}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'trace': error_trace
+        }), 500
+
+
 @app.route('/api/check_models', methods=['GET'])
 def check_models():
     """Check which models are available (user-trained and pretrained)"""
@@ -904,21 +1318,44 @@ def run_inference():
         data = request.json
         model_type = data.get('model_type', 'cnn')
         model_source = data.get('model_source', 'user')  # 'user' or 'pretrained'
-        threshold_method = data.get('threshold_method', 'percentile')  # 'percentile', 'youden', 'f1', 'mcc', 'custom'
+        dataset_type = data.get('dataset_type', 'earthquake')  # 'earthquake' or 'financial'
+        
+        # Financial-specific parameters
+        stock_ticker = data.get('stock_ticker', 'TSLA')
+        start_date = data.get('start_date', '2019-01-01')
+        end_date = data.get('end_date', '2021-12-31')
+        
+        threshold_method = data.get('threshold_method', 'percentile')  # 'percentile', 'youden', 'f1', 'mcc', 'custom', 'mad'
         percentile = data.get('percentile', 95)  # For percentile method
         custom_value = data.get('custom_value', 0.0001)  # For custom method
+        mad_k = data.get('mad_k', 2.5)  # For MAD method
+        stress_percentile = data.get('stress_percentile', 90)  # For stress mask
         
         print(f"\n{'='*60}")
         print(f"🧪 STARTING TEST INFERENCE")
         print(f"{'='*60}")
         print(f"Model type: {model_type}")
         print(f"Model source: {model_source}")
+        print(f"Dataset type: {dataset_type}")
+        if dataset_type == 'financial':
+            print(f"Stock ticker: {stock_ticker}")
+            print(f"Date range: {start_date} to {end_date}")
         print(f"Threshold method: {threshold_method}")
         if threshold_method == 'percentile':
             print(f"Percentile: p{percentile}")
         elif threshold_method == 'custom':
             print(f"Custom threshold: {custom_value}")
+        elif threshold_method == 'mad':
+            print(f"MAD k: {mad_k}, Stress percentile: {stress_percentile}")
         
+        # Handle financial vs earthquake inference differently
+        if dataset_type == 'financial':
+            return run_financial_inference(
+                model_type, stock_ticker, start_date, end_date, threshold_method,
+                mad_k, stress_percentile, custom_value, percentile
+            )
+        
+        # Continue with earthquake inference...
         # Determine model path
         if model_source == 'user':
             model_path = f'models/{model_type}_ae_best.keras'

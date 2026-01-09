@@ -726,18 +726,46 @@ body {
 
 .dropdown {
     width: 100%;
-    padding: 0.8rem;
-    background: var(--bg-navy);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba(26, 35, 50, 0.8) 0%, rgba(15, 24, 37, 0.9) 100%);
+    border: 1.5px solid var(--border-color);
+    border-radius: 10px;
     color: var(--text-primary);
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    font-weight: 500;
     cursor: pointer;
     outline: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=UTF-8,<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1.5L6 6.5L11 1.5" stroke="%234A90E2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    padding-right: 2.5rem;
 }
 
 .dropdown:hover {
     border-color: var(--primary-blue);
+    background: linear-gradient(135deg, rgba(26, 35, 50, 1) 0%, rgba(15, 24, 37, 1) 100%);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
+    transform: translateY(-1px);
+}
+
+.dropdown:focus {
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.dropdown option {
+    background: var(--bg-navy);
+    color: var(--text-primary);
+    padding: 0.5rem;
+    font-weight: 500;
+}
+
+input[type="date"].dropdown {
+    background-image: none;
+    padding-right: 1rem;
 }
 
 /* ============================================================

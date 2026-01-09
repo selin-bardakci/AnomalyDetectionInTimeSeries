@@ -20,10 +20,9 @@
             </div>
             <div class="nav-links">
                 <a href="/">Documentation</a>
-                <a href="/">Datasets</a>
-                <a href="/">Model Zoo</a>
-                <a href="/training">Benchmark</a>
-                <a href="/training" class="btn-deploy">Deploy Model</a>
+                <a href="/training">Training</a>
+                <a href="/testing" class="active">Testing</a>
+                <a href="/training" class="btn-deploy">Get Started</a>
             </div>
         </div>
     </nav>
@@ -31,8 +30,26 @@
     <div class="main-container">
         <!-- Left Sidebar -->
         <aside class="sidebar">
+            <!-- Dataset Selection -->
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">SELECT DATASET</h3>
+                <div class="option-card" data-test-dataset="earthquake">
+                    <div class="option-icon">🏔️</div>
+                    <div class="option-content">
+                        <div class="option-name">Earthquake Data</div>
+                    </div>
+                </div>
+                <div class="option-card selected" data-test-dataset="financial">
+                    <div class="option-icon">📊</div>
+                    <div class="option-content">
+                        <div class="option-name">Financial Data</div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Model Selection -->
             <div class="sidebar-section">
+                <h3 class="sidebar-title">MODEL SELECTION</h3>
                 <div class="option-card selected" data-test-model="cnn">
                     <div class="option-icon">◻️</div>
                     <div class="option-content">
@@ -45,35 +62,77 @@
                         <div class="option-name">LSTM</div>
                     </div>
                 </div>
+                <div class="option-card" data-test-model="gru">
+                    <div class="option-icon">🔁</div>
+                    <div class="option-content">
+                        <div class="option-name">GRU</div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Hyperparameters -->
-            <div class="sidebar-section">
-                <h3 class="sidebar-title">HYPERPARAMETERS</h3>
+            <!-- Financial Dataset Selection (shown only for financial) -->
+            <div class="sidebar-section" id="financialDatasetSection">
+                <h3 class="sidebar-title">STOCK SELECTION</h3>
+                <div class="param-group">
+                    <label class="param-label">Stock Ticker</label>
+                    <select class="dropdown" id="testStockTicker">
+                        <option value="TSLA" selected>TSLA - Tesla</option>
+                        <option value="ETH-USD">ETH-USD - Ethereum</option>
+                        <option value="BTC-USD">BTC-USD - Bitcoin</option>
+                        <option value="AAPL">AAPL - Apple</option>
+                        <option value="GOOGL">GOOGL - Google</option>
+                        <option value="MSFT">MSFT - Microsoft</option>
+                        <option value="AMZN">AMZN - Amazon</option>
+                    </select>
+                </div>
                 
+                <h3 class="sidebar-title" style="margin-top: 1.5rem;">TEST DATE RANGE</h3>
                 <div class="param-group">
-                    <label class="param-label">Learning Rate</label>
-                    <input type="range" class="slider" id="learningRate" min="0.0001" max="0.01" step="0.0001" value="0.001">
-                    <div class="param-value" id="learningRateValue">0.001</div>
+                    <label class="param-label">Start Date</label>
+                    <input type="date" class="dropdown" id="testStartDate" value="2019-01-01">
                 </div>
-
                 <div class="param-group">
-                    <label class="param-label">Look-back Window</label>
-                    <select class="dropdown" id="lookbackWindow">
-                        <option value="64">64 steps</option>
-                        <option value="100" selected>100 steps</option>
-                        <option value="128">128 steps</option>
-                        <option value="256">256 steps</option>
-                    </select>
+                    <label class="param-label">End Date</label>
+                    <input type="date" class="dropdown" id="testEndDate" value="2021-12-31">
                 </div>
+                <div class="info-box" style="margin-top: 1rem; padding: 0.75rem; background: rgba(74, 144, 226, 0.1); border-radius: 8px; font-size: 0.85rem;">
+                    📅 Model will be tested on selected date range
+                </div>
+            </div>
 
-                <div class="param-group">
-                    <label class="param-label">Threshold Percentile</label>
-                    <select class="dropdown" id="thresholdPercentile">
-                        <option value="95">95th percentile</option>
-                        <option value="97" selected>97th percentile</option>
-                        <option value="99">99th percentile</option>
-                    </select>
+            <!-- Threshold Method (Only for Earthquake) -->
+            <div class="sidebar-section" id="thresholdSection" style="display: none;">
+                <h3 class="sidebar-title">ANOMALY DETECTION</h3>
+                
+                <!-- For Earthquake Data -->
+                <div id="earthquakeThresholdParams" style="display: none;">
+                    <div class="param-group">
+                        <label class="param-label">Detection Method</label>
+                        <select class="dropdown" id="thresholdMethod">
+                            <option value="percentile" selected>Percentile</option>
+                            <option value="youden">ROC-Optimal (Youden's J)</option>
+                            <option value="f1">F1-Score Optimization</option>
+                            <option value="mcc">MCC Optimization</option>
+                            <option value="custom">Custom Value</option>
+                        </select>
+                    </div>
+
+                    <!-- Percentile Parameter -->
+                    <div class="param-group" id="percentileParams">
+                        <label class="param-label">Threshold Percentile</label>
+                        <select class="dropdown" id="thresholdPercentile">
+                            <option value="90">90th percentile</option>
+                            <option value="95" selected>95th percentile</option>
+                            <option value="97">97th percentile</option>
+                            <option value="99">99th percentile</option>
+                        </select>
+                    </div>
+
+                    <!-- Custom Threshold -->
+                    <div class="param-group" id="customParams" style="display: none;">
+                        <label class="param-label">Custom Threshold</label>
+                        <input type="number" class="dropdown" id="customThreshold" step="0.00001" value="0.0001" style="padding: 8px;">
+                    </div>
                 </div>
             </div>
         </aside>
@@ -84,17 +143,10 @@
                 <div>
                     <h1 class="page-title">Test Inference & Results</h1>
                     <p class="page-subtitle">
-                        Upload test data from your laptop or use existing project data.
+                        Evaluate trained model on test dataset
                     </p>
                 </div>
                 <div class="action-buttons">
-                    <button class="btn-use-existing" id="useExistingData" title="Use project test data">
-                        <span>📂 Use Project Data</span>
-                    </button>
-                    <label for="testFile" class="btn-upload">
-                        <span>📁 Upload .csv/.npz</span>
-                        <input type="file" id="testFile" accept=".csv,.npz" hidden>
-                    </label>
                     <button class="btn-run" id="runPrediction">
                         <span class="search-icon">🔍</span> Run Prediction
                     </button>
@@ -104,42 +156,102 @@
             <!-- Results Chart -->
             <div class="chart-container-full">
                 <div class="chart-header">
-                    <h3>Time Series Analysis: Magnitude (M) / Price ($)</h3>
+                    <h3 id="chartTitle">Price vs Anomaly Detection</h3>
                     <div class="chart-legend">
                         <span class="legend-item">
-                            <span class="legend-box" style="background: transparent; border: 2px solid #888;"></span> Signal
+                            <span class="legend-box" style="background: transparent; border: 2px solid #888;"></span> Price/Signal
                         </span>
                         <span class="legend-item">
-                            <span class="legend-box" style="background: rgba(239, 68, 68, 0.3);"></span> Anomaly Region
+                            <span class="legend-box" style="background: rgba(239, 68, 68, 0.3);"></span> Anomaly
                         </span>
                     </div>
                 </div>
                 <canvas id="anomalyChart"></canvas>
             </div>
 
+            <!-- Anomaly Detection Parameters (Financial) -->
+            <div class="test-controls" id="financialTestControls" style="display: none;">
+                <div class="control-group">
+                    <label>MAD k-value</label>
+                    <div class="threshold-control">
+                        <input type="range" id="madK" min="1.5" max="4.0" value="2.5" step="0.1" class="slider">
+                        <span class="threshold-value" id="madKValue">2.5</span>
+                    </div>
+                    <p style="opacity: 0.7; font-size: 0.85rem; margin-top: 0.5rem;">
+                        📐 Controls sensitivity: Higher k = fewer anomalies (stricter)
+                        <br>Formula: threshold = median + k × 1.4826 × MAD
+                    </p>
+                </div>
+
+                <div class="control-group">
+                    <label>Stress Percentile (q)</label>
+                    <div class="threshold-control">
+                        <input type="range" id="stressPercentile" min="80" max="99" value="90" step="1" class="slider">
+                        <span class="threshold-value" id="stressPercentileValue">90</span>
+                    </div>
+                    <p style="opacity: 0.7; font-size: 0.85rem; margin-top: 0.5rem;">
+                        🔥 High volatility filter: Only flags anomalies during stress periods
+                        <br>Anomaly = (residual > threshold) AND (|return| > q-th percentile)
+                    </p>
+                </div>
+
+                <!-- Recommended Threshold Display -->
+                <div class="control-group" id="recommendedThreshold" style="background: rgba(74, 144, 226, 0.1); padding: 12px; border-radius: 8px; margin-top: 12px;">
+                    <label style="color: #4A90E2; font-weight: 600;">📊 Calculated Threshold</label>
+                    <div style="font-family: monospace; font-size: 13px; color: #4A90E2; margin-top: 4px;" id="recommendedValue">Will be shown after inference</div>
+                </div>
+            </div>
+
             <!-- Metrics Summary -->
             <div class="metrics-grid" id="metricsGrid" style="display: none;">
-                <div class="metric-box">
+                <!-- Financial Metrics -->
+                <div class="metric-box financial-metrics" style="display: none;">
+                    <div class="metric-label">Anomaly Count</div>
+                    <div class="metric-value" id="anomalyCount">--</div>
+                </div>
+                <div class="metric-box financial-metrics" style="display: none;">
+                    <div class="metric-label">Anomaly Rate</div>
+                    <div class="metric-value" id="anomalyRate">--</div>
+                </div>
+                <div class="metric-box financial-metrics" style="display: none;">
+                    <div class="metric-label">MAE</div>
+                    <div class="metric-value" id="maeValue">--</div>
+                </div>
+                <div class="metric-box financial-metrics" style="display: none;">
+                    <div class="metric-label">Threshold</div>
+                    <div class="metric-value" id="thresholdValue">--</div>
+                </div>
+                <div class="metric-box financial-metrics" style="display: none;">
+                    <div class="metric-label">2021 Anomalies</div>
+                    <div class="metric-value" id="anomalies2021">--</div>
+                </div>
+                <div class="metric-box financial-metrics" style="display: none;">
+                    <div class="metric-label">Stress Threshold</div>
+                    <div class="metric-value" id="stressThreshold">--</div>
+                </div>
+                
+                <!-- Earthquake Metrics -->
+                <div class="metric-box earthquake-metrics">
                     <div class="metric-label">True Positives</div>
                     <div class="metric-value green" id="tpValue">--</div>
                 </div>
-                <div class="metric-box">
+                <div class="metric-box earthquake-metrics">
                     <div class="metric-label">False Positives</div>
                     <div class="metric-value red" id="fpValue">--</div>
                 </div>
-                <div class="metric-box">
+                <div class="metric-box earthquake-metrics">
                     <div class="metric-label">Precision</div>
                     <div class="metric-value" id="precisionValue">--</div>
                 </div>
-                <div class="metric-box">
+                <div class="metric-box earthquake-metrics">
                     <div class="metric-label">Recall</div>
                     <div class="metric-value" id="recallValue">--</div>
                 </div>
-                <div class="metric-box">
+                <div class="metric-box earthquake-metrics">
                     <div class="metric-label">F1-Score</div>
                     <div class="metric-value" id="f1TestValue">--</div>
                 </div>
-                <div class="metric-box">
+                <div class="metric-box earthquake-metrics">
                     <div class="metric-label">ROC AUC</div>
                     <div class="metric-value" id="aucTestValue">--</div>
                 </div>

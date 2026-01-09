@@ -5,6 +5,191 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CHRONOS.AI - Advanced Anomaly Detection Platform</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .doc-section {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .doc-header {
+            text-align: center;
+            padding: 3rem 0;
+            background: linear-gradient(135deg, rgba(74, 144, 226, 0.1) 0%, rgba(45, 212, 191, 0.1) 100%);
+            border-radius: 16px;
+            margin-bottom: 3rem;
+        }
+        .doc-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        .doc-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .use-case-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+        .use-case-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+        .use-case-card:hover {
+            border-color: var(--primary-blue);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(74, 144, 226, 0.2);
+        }
+        .use-case-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .use-case-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--primary-blue);
+        }
+        .use-case-desc {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--success-green);
+            font-weight: bold;
+        }
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        .model-card {
+            background: linear-gradient(135deg, rgba(26, 35, 50, 0.8) 0%, rgba(15, 24, 37, 0.9) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .model-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--primary-blue);
+        }
+        .model-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+        .model-specs {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .workflow-section {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        .workflow-steps {
+            display: flex;
+            justify-content: space-between;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+        .workflow-step {
+            flex: 1;
+            min-width: 200px;
+            text-align: center;
+            padding: 1rem;
+        }
+        .step-number {
+            width: 50px;
+            height: 50px;
+            background: var(--primary-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .step-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .step-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        .cta-section {
+            text-align: center;
+            padding: 3rem 0;
+            margin: 3rem 0;
+        }
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+        .btn {
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(74, 144, 226, 0.3);
+        }
+        .btn-secondary {
+            background: transparent;
+            border: 2px solid var(--primary-blue);
+            color: var(--primary-blue);
+        }
+        .btn-secondary:hover {
+            background: var(--primary-blue);
+            color: white;
+        }
+        h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            margin-top: 3rem;
+        }
+        h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            margin-top: 2rem;
+            color: var(--primary-blue);
+        }
+    </style>
 </head>
 <body>
     <!-- Navigation -->
@@ -18,60 +203,245 @@
                 <span class="logo-text">CHRONOS<span class="logo-ai">.AI</span></span>
             </div>
             <div class="nav-links">
-                <a href="/">Documentation</a>
-                <a href="/">Datasets</a>
-                <a href="/">Model Zoo</a>
-                <a href="/">Benchmark</a>
-                <a href="/training" class="btn-deploy">Deploy Model</a>
+                <a href="/" class="active">Documentation</a>
+                <a href="/training">Training</a>
+                <a href="/testing">Testing</a>
+                <a href="/training" class="btn-deploy">Get Started</a>
             </div>
         </div>
     </nav>
 
-    <!-- Hero Section -->
-    <section class="hero">
-        <div class="hero-content">
-            <h1 class="hero-title">
-                Advanced <span class="gradient-text">Anomaly<br>Detection</span> Platform
-            </h1>
-            <p class="hero-subtitle">
-                Train and evaluate industrial-grade models including <strong>iTransformer</strong>, <strong>1D-CNN</strong>, 
-                and <strong>LSTM</strong> for seismic and financial forecasting. Detect rare events before they 
-                become critical.
+    <div class="doc-section">
+        <!-- Header -->
+        <div class="doc-header">
+            <h1 class="doc-title">CHRONOS.AI Documentation</h1>
+            <p class="doc-subtitle">
+                Advanced deep learning platform for anomaly detection in time series data. 
+                Supports both seismic event detection and financial market anomaly detection with state-of-the-art models.
             </p>
-            <div class="hero-buttons">
-                <a href="/training" class="btn btn-primary">Get Started</a>
-                <a href="#demo" class="btn btn-secondary">Watch Demo</a>
+        </div>
+
+        <!-- Use Cases -->
+        <h2>🎯 Use Cases</h2>
+        <div class="use-case-grid">
+            <div class="use-case-card">
+                <div class="use-case-icon">🏔️</div>
+                <h3 class="use-case-title">Earthquake Detection</h3>
+                <p class="use-case-desc">
+                    Detect seismic anomalies in real-time using autoencoder-based models. 
+                    Analyze Power Spectral Density (PSD) features to identify earthquake events 
+                    with high precision.
+                </p>
+                <ul class="feature-list">
+                    <li>Real-time seismic event detection</li>
+                    <li>PSD feature analysis (128-sample windows)</li>
+                    <li>Multiple threshold optimization methods (ROC, F1, MCC)</li>
+                    <li>High accuracy with low false alarm rate</li>
+                </ul>
+            </div>
+
+            <div class="use-case-card">
+                <div class="use-case-icon">📊</div>
+                <h3 class="use-case-title">Financial Market Anomaly Detection</h3>
+                <p class="use-case-desc">
+                    Identify anomalous price movements and volatility spikes in cryptocurrency 
+                    and stock markets using forecasting-based anomaly detection with MAD threshold.
+                </p>
+                <ul class="feature-list">
+                    <li>Dynamic data fetching via YFinance API</li>
+                    <li>Multi-feature engineering (returns, volatility)</li>
+                    <li>MAD-based threshold with stress filtering</li>
+                    <li>Customizable date ranges and stock symbols</li>
+                </ul>
             </div>
         </div>
+
+        <!-- Models -->
+        <h2>🤖 Available Models</h2>
         
-        <div class="hero-visual">
-            <canvas id="timeSeriesCanvas"></canvas>
-            <div class="stats-panel">
-                <div class="stat-item">
-                    <div class="stat-label">AI Time Series</div>
-                    <div class="stat-value">247 TK</div>
-                    <div class="stat-change">+41 kr</div>
+        <h3>Earthquake Models (Autoencoder Architecture)</h3>
+        <div class="model-grid">
+            <div class="model-card">
+                <div class="model-name">iTransformer</div>
+                <div class="model-desc">State-of-the-art transformer-based autoencoder for seismic data</div>
+                <div class="model-specs">
+                    • Window: 128 samples<br>
+                    • Architecture: Transformer encoder-decoder<br>
+                    • Loss: MSE reconstruction error
                 </div>
-                <div class="stat-item">
-                    <div class="stat-label">Prediction Ticketing</div>
-                    <div class="stat-value">202K</div>
-                    <div class="stat-change">+58 kr</div>
+            </div>
+            <div class="model-card">
+                <div class="model-name">1D-CNN</div>
+                <div class="model-desc">Convolutional autoencoder for pattern recognition</div>
+                <div class="model-specs">
+                    • Window: 128 samples<br>
+                    • Architecture: Conv1D layers<br>
+                    • Fast inference, good for real-time
                 </div>
-                <div class="stat-item">
-                    <div class="stat-label">Prediction</div>
-                    <div class="stat-change">+20 kr</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Prediction</div>
-                    <div class="stat-change">+52 kr</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Prediction Ticketing</div>
-                    <div class="stat-change">+77 kr</div>
+            </div>
+            <div class="model-card">
+                <div class="model-name">LSTM</div>
+                <div class="model-desc">Recurrent autoencoder for temporal dependencies</div>
+                <div class="model-specs">
+                    • Window: 128 samples<br>
+                    • Architecture: LSTM encoder-decoder<br>
+                    • Captures long-term patterns
                 </div>
             </div>
         </div>
-    </section>
+
+        <h3>Financial Models (Forecasting Architecture)</h3>
+        <div class="model-grid">
+            <div class="model-card">
+                <div class="model-name">1D-CNN Forecaster</div>
+                <div class="model-desc">Conv1D layers for next-step return prediction</div>
+                <div class="model-specs">
+                    • Window: 32 timesteps, 4 features<br>
+                    • Target: Next normalized return<br>
+                    • Epochs: 80 (default)
+                </div>
+            </div>
+            <div class="model-card">
+                <div class="model-name">LSTM Forecaster</div>
+                <div class="model-desc">LSTM-based return forecasting</div>
+                <div class="model-specs">
+                    • Window: 32 timesteps, 4 features<br>
+                    • 64 LSTM units<br>
+                    • Epochs: 50 (default)
+                </div>
+            </div>
+            <div class="model-card">
+                <div class="model-name">GRU Forecaster</div>
+                <div class="model-desc">Gated Recurrent Unit for efficient prediction</div>
+                <div class="model-specs">
+                    • Window: 32 timesteps, 4 features<br>
+                    • 64 GRU units<br>
+                    • Faster than LSTM
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow -->
+        <h2>🔄 Workflow</h2>
+        <div class="workflow-section">
+            <div class="workflow-steps">
+                <div class="workflow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Select Dataset</div>
+                    <div class="step-desc">Choose between Earthquake or Financial data</div>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Configure Parameters</div>
+                    <div class="step-desc">Set stock symbol, date range, or use existing data</div>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Train Model</div>
+                    <div class="step-desc">Train with real-time loss monitoring</div>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-title">Test & Evaluate</div>
+                    <div class="step-desc">Run inference with custom thresholds</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Anomaly Detection -->
+        <h2>📈 Financial Anomaly Detection Method</h2>
+        <div class="workflow-section">
+            <h3>Feature Engineering</h3>
+            <ul class="feature-list">
+                <li><strong>log_return:</strong> ln(price_t / price_{t-1})</li>
+                <li><strong>abs_return:</strong> Absolute value of log returns</li>
+                <li><strong>rolling_std_7:</strong> 7-day rolling volatility</li>
+                <li><strong>rolling_std_30:</strong> 30-day rolling volatility</li>
+                <li><strong>norm_return:</strong> log_return / (rolling_std_30 + ε)</li>
+            </ul>
+
+            <h3>MAD Threshold Method</h3>
+            <p style="color: var(--text-secondary); margin: 1rem 0;">
+                Median Absolute Deviation (MAD) provides robust outlier detection:
+            </p>
+            <div style="background: rgba(74, 144, 226, 0.1); padding: 1rem; border-radius: 8px; font-family: monospace;">
+                threshold = median(residuals) + k × 1.4826 × MAD<br>
+                MAD = median(|residuals - median(residuals)|)
+            </div>
+            <p style="color: var(--text-secondary); margin: 1rem 0;">
+                <strong>k parameter:</strong> Controls sensitivity (1.5-4.0, default 2.5)<br>
+                Higher k = fewer anomalies (stricter detection)
+            </p>
+
+            <h3>Stress Mask Filtering</h3>
+            <p style="color: var(--text-secondary); margin: 1rem 0;">
+                Only flag anomalies during high volatility periods:
+            </p>
+            <div style="background: rgba(74, 144, 226, 0.1); padding: 1rem; border-radius: 8px; font-family: monospace;">
+                stress_mask = |return_t| > percentile(|returns|, q)<br>
+                final_anomaly = (residual > threshold) AND stress_mask
+            </div>
+            <p style="color: var(--text-secondary); margin: 1rem 0;">
+                <strong>q parameter:</strong> Stress percentile (80-99, default 90)<br>
+                Higher q = only extreme volatility triggers anomalies
+            </p>
+        </div>
+
+        <!-- Earthquake Detection -->
+        <h2>🏔️ Earthquake Detection Method</h2>
+        <div class="workflow-section">
+            <h3>Autoencoder Reconstruction</h3>
+            <p style="color: var(--text-secondary); margin: 1rem 0;">
+                Models learn to reconstruct normal seismic patterns. Large reconstruction errors indicate anomalies.
+            </p>
+
+            <h3>Threshold Methods</h3>
+            <ul class="feature-list">
+                <li><strong>ROC-Optimal (Youden's J):</strong> Maximizes TPR - FPR for best balance</li>
+                <li><strong>F1-Score Optimization:</strong> Optimizes precision-recall tradeoff</li>
+                <li><strong>MCC Optimization:</strong> Matthews Correlation Coefficient</li>
+                <li><strong>Percentile:</strong> p90-p99 of reconstruction errors</li>
+                <li><strong>Custom:</strong> User-defined threshold value</li>
+            </ul>
+        </div>
+
+        <!-- Technical Specs -->
+        <h2>⚙️ Technical Specifications</h2>
+        <div class="workflow-section">
+            <h3>Training Parameters</h3>
+            <ul class="feature-list">
+                <li><strong>Batch Size:</strong> 32 (financial), 256 (earthquake)</li>
+                <li><strong>Early Stopping:</strong> Patience 5 (financial), 10 (earthquake)</li>
+                <li><strong>Optimizer:</strong> Adam (lr=0.001)</li>
+                <li><strong>Loss:</strong> MSE</li>
+            </ul>
+
+            <h3>Data Sources</h3>
+            <ul class="feature-list">
+                <li><strong>Financial:</strong> YFinance API (real-time fetching)</li>
+                <li><strong>Earthquake:</strong> Custom PSD dataset (z_channel_train.pkl)</li>
+            </ul>
+
+            <h3>Model Storage</h3>
+            <ul class="feature-list">
+                <li><strong>Pretrained:</strong> webapp/pretrained/{model}_financial_best.keras</li>
+                <li><strong>User Trained:</strong> webapp/models/{model}_financial_best.keras</li>
+                <li><strong>Artifacts:</strong> Scalers, thresholds, metadata (JSON)</li>
+            </ul>
+        </div>
+
+        <!-- CTA -->
+        <div class="cta-section">
+            <h2>Ready to Get Started?</h2>
+            <p style="color: var(--text-secondary); max-width: 600px; margin: 1rem auto;">
+                Train your first model or test our pretrained models on your data
+            </p>
+            <div class="cta-buttons">
+                <a href="/training" class="btn btn-primary">Start Training</a>
+                <a href="/testing" class="btn btn-secondary">Test Models</a>
+            </div>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='js/home.js') }}"></script>
 </body>

@@ -15,6 +15,23 @@ const datasetModels = {
     financial: ['cnn', 'lstm', 'gru']
 };
 
+// Update financial training info based on selected parameters
+function updateFinancialTrainingInfo() {
+    const stockTicker = document.getElementById('stockTicker')?.value || 'TSLA';
+    const startDate = document.getElementById('startDate')?.value || '2019-01-01';
+    const endDate = document.getElementById('endDate')?.value || '2021-12-31';
+    
+    // Calculate estimated days
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    
+    // Update UI
+    document.getElementById('financialStock').textContent = stockTicker;
+    document.getElementById('financialDates').textContent = `${startDate} to ${endDate}`;
+    document.getElementById('financialDays').textContent = `~${daysDiff} days`;
+}
+
 // AGGRESSIVE heartbeat - fires every 2 seconds, same as polling rate
 setInterval(() => {
     if (isTrainingActive) {
@@ -282,11 +299,19 @@ document.querySelectorAll('[data-dataset]').forEach(card => {
             
             // Show/hide models and financial dataset selector based on dataset
             const financialDatasetSection = document.getElementById('financialDatasetSection');
+            const earthquakeTrainingInfo = document.getElementById('earthquakeTrainingInfo');
+            const financialTrainingInfo = document.getElementById('financialTrainingInfo');
+            const financialTestParams = document.getElementById('financialTestParams');
+            const earthquakeTestParams = document.getElementById('earthquakeTestParams');
             
             if (selectedDataset === 'earthquake') {
                 document.querySelectorAll('.earthquake-model').forEach(m => m.style.display = 'flex');
                 document.querySelectorAll('.financial-model').forEach(m => m.style.display = 'none');
                 if (financialDatasetSection) financialDatasetSection.style.display = 'none';
+                if (earthquakeTrainingInfo) earthquakeTrainingInfo.style.display = 'block';
+                if (financialTrainingInfo) financialTrainingInfo.style.display = 'none';
+                if (financialTestParams) financialTestParams.style.display = 'none';
+                if (earthquakeTestParams) earthquakeTestParams.style.display = 'block';
                 // Select first earthquake model
                 selectedModel = 'itransformer';
                 document.querySelectorAll('[data-model]').forEach(c => c.classList.remove('selected'));
@@ -296,11 +321,18 @@ document.querySelectorAll('[data-dataset]').forEach(card => {
                 document.querySelectorAll('.earthquake-model').forEach(m => m.style.display = 'none');
                 document.querySelectorAll('.financial-model').forEach(m => m.style.display = 'flex');
                 if (financialDatasetSection) financialDatasetSection.style.display = 'block';
+                if (earthquakeTrainingInfo) earthquakeTrainingInfo.style.display = 'none';
+                if (financialTrainingInfo) financialTrainingInfo.style.display = 'block';
+                if (financialTestParams) financialTestParams.style.display = 'block';
+                if (earthquakeTestParams) earthquakeTestParams.style.display = 'none';
+                if (financialTrainingInfo) financialTrainingInfo.style.display = 'block';
                 // Select first financial model
                 selectedModel = 'cnn';
                 document.querySelectorAll('[data-model]').forEach(c => c.classList.remove('selected'));
                 const firstFinancialModel = document.querySelector('.financial-model[data-model="cnn"]');
                 if (firstFinancialModel) firstFinancialModel.classList.add('selected');
+                // Update financial training info
+                updateFinancialTrainingInfo();
             }
         }
     });
@@ -373,9 +405,16 @@ document.getElementById('trainButton').addEventListener('click', async function(
             batch_size: 256
         };
         
-        // Add financial dataset selection if financial is selected
+        // Add financial parameters if financial is selected
         if (selectedDataset === 'financial') {
-            requestBody.financial_dataset = selectedFinancialDataset;
+            const stockTicker = document.getElementById('stockTicker')?.value || 'TSLA';
+            const startDate = document.getElementById('startDate')?.value || '2019-01-01';
+            const endDate = document.getElementById('endDate')?.value || '2021-12-31';
+            
+            requestBody.stock_ticker = stockTicker;
+            requestBody.start_date = startDate;
+            requestBody.end_date = endDate;
+            requestBody.financial_dataset = 'dynamic';  // Legacy parameter
         }
         
         const response = await fetch('/api/train_model', {
@@ -415,6 +454,36 @@ window.addEventListener('DOMContentLoaded', function() {
     console.log('🎨 Initializing training dashboard...');
     initChart();
     console.log('✓ Chart initialized:', lossChart);
+    
+    // Add event listeners for financial parameter changes
+    const stockTicker = document.getElementById('stockTicker');
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    
+    if (stockTicker) {
+        stockTicker.addEventListener('change', updateFinancialTrainingInfo);
+    }
+    if (startDate) {
+        startDate.addEventListener('change', updateFinancialTrainingInfo);
+    }
+    if (endDate) {
+        endDate.addEventListener('change', updateFinancialTrainingInfo);
+    }
+    
+    // Add event listeners for test MAD parameters
+    const testMadK = document.getElementById('testMadK');
+    const testStressPercentile = document.getElementById('testStressPercentile');
+    
+    if (testMadK) {
+        testMadK.addEventListener('input', function() {
+            document.getElementById('testMadKValue').textContent = this.value;
+        });
+    }
+    if (testStressPercentile) {
+        testStressPercentile.addEventListener('input', function() {
+            document.getElementById('testStressPercentileValue').textContent = this.value;
+        });
+    }
 });
 
 // Cleanup on page unload
