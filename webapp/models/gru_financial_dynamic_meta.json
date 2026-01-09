@@ -1,0 +1,14 @@
+{
+  "window": 32,
+  "n_test_samples": 186,
+  "split_ratio": 0.7,
+  "features": [
+    "norm_return",
+    "abs_return",
+    "rolling_std_7",
+    "rolling_std_30"
+  ],
+  "model_type": "gru",
+  "stock_ticker": "GOOGL",
+  "dataset": "dynamic"
+}

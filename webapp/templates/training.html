@@ -213,6 +213,30 @@
                     <!-- Financial Test Parameters -->
                     <div id="financialTestParams" style="display: none;">
                         <div class="control-group">
+                            <label>Model Source</label>
+                            <div class="model-source-toggle">
+                                <button class="source-btn active" data-source="user" id="financialUserBtn">User Trained</button>
+                                <button class="source-btn" data-source="pretrained" id="financialPretrainedBtn">Pretrained</button>
+                            </div>
+                            <p class="model-status" id="financialModelStatus">Checking model availability...</p>
+                        </div>
+
+                        <div class="control-group">
+                            <label>Test Date Range</label>
+                            <div class="param-group" style="margin-bottom: 0.75rem;">
+                                <label class="param-label" style="font-size: 0.85rem;">Start Date</label>
+                                <input type="date" class="dropdown" id="testStartDate" value="2022-01-01">
+                            </div>
+                            <div class="param-group">
+                                <label class="param-label" style="font-size: 0.85rem;">End Date</label>
+                                <input type="date" class="dropdown" id="testEndDate" value="2023-12-31">
+                            </div>
+                            <p style="opacity: 0.7; font-size: 0.85rem; margin-top: 0.5rem;">
+                                📅 Test period for anomaly detection (tested on same stock as training)
+                            </p>
+                        </div>
+
+                        <div class="control-group">
                             <label>MAD k-value</label>
                             <div class="threshold-control">
                                 <input type="range" id="testMadK" min="1.5" max="4.0" value="2.5" step="0.1">
@@ -294,8 +318,8 @@
                 <div class="test-results" id="testResults" style="display: none;">
                     <h3 style="margin-bottom: 1.5rem; color: #4A90E2;">Test Results</h3>
                     
-                    <!-- Metrics Grid -->
-                    <div class="test-metrics-grid">
+                    <!-- Metrics Grid (Earthquake only) -->
+                    <div class="test-metrics-grid" id="earthquakeMetrics">
                         <div class="test-metric-card">
                             <div class="test-metric-label">AUC Score</div>
                             <div class="test-metric-value" id="testAUC">--</div>
@@ -318,16 +342,16 @@
                         </div>
                     </div>
 
-                    <!-- Confusion Matrix Stats -->
-                    <div class="confusion-stats">
+                    <!-- Confusion Matrix Stats (Earthquake only) -->
+                    <div class="confusion-stats" id="earthquakeConfusion">
                         <div class="stat-item"><span class="stat-label">True Positives:</span> <span id="testTP">--</span></div>
                         <div class="stat-item"><span class="stat-label">False Positives:</span> <span id="testFP">--</span></div>
                         <div class="stat-item"><span class="stat-label">True Negatives:</span> <span id="testTN">--</span></div>
                         <div class="stat-item"><span class="stat-label">False Negatives:</span> <span id="testFN">--</span></div>
                     </div>
 
-                    <!-- Visualization Plots -->
-                    <div class="test-plots">
+                    <!-- Visualization Plots (Earthquake only) -->
+                    <div class="test-plots" id="earthquakePlots">
                         <div class="plot-container">
                             <h4>ROC Curve</h4>
                             <img id="rocPlot" src="" alt="ROC Curve" style="width: 100%; border-radius: 8px;">
@@ -367,11 +391,6 @@
                 <div class="metric-bar">
                     <div class="metric-bar-fill blue" id="f1Bar" style="width: 0%"></div>
                 </div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-label">INFERENCE LATENCY</div>
-                <div class="metric-value yellow" id="latencyValue">--</div>
             </div>
         </aside>
     </div>

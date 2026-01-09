@@ -1,0 +1,9 @@
+{
+  "model": "1D-CNN",
+  "window": 32,
+  "split_ratio": 0.7,
+  "task": "log-return next-step forecasting",
+  "anomaly_method": "residual + stress + MAD",
+  "stress_percentile": 90,
+  "mad_k": 2.5
+}

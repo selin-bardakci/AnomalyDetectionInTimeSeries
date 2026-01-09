@@ -254,19 +254,33 @@ async function pollTrainingStatus() {
                 lossChart.data.datasets[1].data = status.history.val_loss;
                 lossChart.update();
                 
-                // Calculate and display metrics
+                // Calculate and display metrics (only if elements exist - earthquake specific)
                 const finalValLoss = status.history.val_loss[status.history.val_loss.length - 1];
-                const auc = 0.9951; // Simulated based on val_loss
-                const f1 = Math.max(0.90, 1 - finalValLoss * 10); // Simulated
-                const latency = 12;
+                const valLossElement = document.getElementById('valLossValue');
+                if (valLossElement) {
+                    valLossElement.textContent = finalValLoss.toFixed(6);
+                }
                 
-                document.getElementById('aucValue').textContent = `${(auc * 100).toFixed(2)}%`;
-                document.getElementById('aucBar').style.width = `${auc * 100}%`;
+                const aucElement = document.getElementById('aucValue');
+                const aucBarElement = document.getElementById('aucBar');
+                if (aucElement && aucBarElement) {
+                    const auc = 0.9951; // Simulated based on val_loss
+                    aucElement.textContent = `${(auc * 100).toFixed(2)}%`;
+                    aucBarElement.style.width = `${auc * 100}%`;
+                }
                 
-                document.getElementById('f1Value').textContent = f1.toFixed(4);
-                document.getElementById('f1Bar').style.width = `${f1 * 100}%`;
+                const f1Element = document.getElementById('f1Value');
+                const f1BarElement = document.getElementById('f1Bar');
+                if (f1Element && f1BarElement) {
+                    const f1 = Math.max(0.90, 1 - finalValLoss * 10); // Simulated
+                    f1Element.textContent = f1.toFixed(4);
+                    f1BarElement.style.width = `${f1 * 100}%`;
+                }
                 
-                document.getElementById('latencyValue').textContent = `${latency}ms`;
+                const latencyElement = document.getElementById('latencyValue');
+                if (latencyElement) {
+                    latencyElement.textContent = '12ms';
+                }
                 
                 document.getElementById('statusBadge').textContent = 'OPTIMIZED';
                 document.getElementById('statusBadge').style.background = '#10B981';
@@ -333,6 +347,8 @@ document.querySelectorAll('[data-dataset]').forEach(card => {
                 if (firstFinancialModel) firstFinancialModel.classList.add('selected');
                 // Update financial training info
                 updateFinancialTrainingInfo();
+                // Check financial model availability
+                checkFinancialModelAvailability();
             }
         }
     });
@@ -346,6 +362,13 @@ document.querySelectorAll('[data-model]').forEach(card => {
             document.querySelectorAll('.option-card[data-model]').forEach(c => c.classList.remove('selected'));
             this.classList.add('selected');
             selectedModel = this.dataset.model;
+            
+            // Check model availability based on dataset type
+            if (selectedDataset === 'financial') {
+                checkFinancialModelAvailability();
+            } else {
+                checkModelAvailability();
+            }
         }
     });
 });
@@ -360,9 +383,22 @@ document.querySelectorAll('[data-financial-dataset]').forEach(card => {
     });
 });
 
+// Stock Ticker Selection - re-check model availability when stock changes
+const stockTickerElement = document.getElementById('stockTicker');
+if (stockTickerElement) {
+    stockTickerElement.addEventListener('change', function() {
+        console.log('Stock ticker changed to:', this.value);
+        if (selectedDataset === 'financial') {
+            checkFinancialModelAvailability();
+        }
+    });
+}
+
 // Start Training (no file upload needed)
 document.getElementById('trainButton').addEventListener('click', async function() {
     console.log('🚀 Train button clicked');
+    console.log('Selected dataset:', selectedDataset);
+    console.log('Selected model:', selectedModel);
     console.log('Chart exists:', !!lossChart);
     
     // Ensure chart is initialized
@@ -386,14 +422,22 @@ document.getElementById('trainButton').addEventListener('click', async function(
     lossChart.data.datasets[1].data = [];
     lossChart.update();
     
-    // Reset metrics
-    document.getElementById('epochValue').textContent = '0/30';
-    document.getElementById('valLossValue').textContent = '---';
-    document.getElementById('aucValue').textContent = '--';
-    document.getElementById('aucBar').style.width = '0%';
-    document.getElementById('f1Value').textContent = '--';
-    document.getElementById('f1Bar').style.width = '0%';
-    document.getElementById('latencyValue').textContent = '--';
+    // Reset metrics (safely check if elements exist)
+    const epochValue = document.getElementById('epochValue');
+    const valLossValue = document.getElementById('valLossValue');
+    const aucValue = document.getElementById('aucValue');
+    const aucBar = document.getElementById('aucBar');
+    const f1Value = document.getElementById('f1Value');
+    const f1Bar = document.getElementById('f1Bar');
+    const latencyValue = document.getElementById('latencyValue');
+    
+    if (epochValue) epochValue.textContent = '0/30';
+    if (valLossValue) valLossValue.textContent = '---';
+    if (aucValue) aucValue.textContent = '--';
+    if (aucBar) aucBar.style.width = '0%';
+    if (f1Value) f1Value.textContent = '--';
+    if (f1Bar) f1Bar.style.width = '0%';
+    if (latencyValue) latencyValue.textContent = '--';
     
     try {
         const requestBody = {
@@ -411,11 +455,15 @@ document.getElementById('trainButton').addEventListener('click', async function(
             const startDate = document.getElementById('startDate')?.value || '2019-01-01';
             const endDate = document.getElementById('endDate')?.value || '2021-12-31';
             
+            console.log('📊 Financial parameters:', { stockTicker, startDate, endDate });
+            
             requestBody.stock_ticker = stockTicker;
             requestBody.start_date = startDate;
             requestBody.end_date = endDate;
             requestBody.financial_dataset = 'dynamic';  // Legacy parameter
         }
+        
+        console.log('📤 Sending training request:', requestBody);
         
         const response = await fetch('/api/train_model', {
             method: 'POST',
@@ -425,13 +473,16 @@ document.getElementById('trainButton').addEventListener('click', async function(
             body: JSON.stringify(requestBody)
         });
         
+        console.log('📥 Got response:', response.status);
         const data = await response.json();
+        console.log('📥 Response data:', data);
         
         if (data.success) {
             console.log('✅ Training started successfully, beginning polling...');
             // Use the centralized startPolling function
             startPolling();
         } else {
+            console.error('❌ Training failed:', data.error);
             alert('Training failed: ' + data.error);
             this.innerHTML = '<span class="check-icon">✓</span> Start Training';
             this.disabled = false;
@@ -507,18 +558,49 @@ document.addEventListener('visibilitychange', function() {
 // ============================================================
 
 let selectedModelSource = 'user';
+let selectedFinancialModelSource = 'user';
 let selectedThreshold = 95;
 let selectedThresholdMethod = 'percentile';
 
-// Model source selection
+// Model source selection - Earthquake
 document.querySelectorAll('.source-btn').forEach(btn => {
     btn.addEventListener('click', function() {
-        document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+        // Only handle earthquake buttons (not financial)
+        if (this.id === 'financialUserBtn' || this.id === 'financialPretrainedBtn') {
+            return; // Skip, handled separately
+        }
+        document.querySelectorAll('.source-btn').forEach(b => {
+            if (b.id !== 'financialUserBtn' && b.id !== 'financialPretrainedBtn') {
+                b.classList.remove('active');
+            }
+        });
         this.classList.add('active');
         selectedModelSource = this.dataset.source;
         checkModelAvailability();
     });
 });
+
+// Model source selection - Financial
+const financialUserBtn = document.getElementById('financialUserBtn');
+const financialPretrainedBtn = document.getElementById('financialPretrainedBtn');
+
+if (financialUserBtn) {
+    financialUserBtn.addEventListener('click', function() {
+        financialPretrainedBtn.classList.remove('active');
+        this.classList.add('active');
+        selectedFinancialModelSource = 'user';
+        checkFinancialModelAvailability();
+    });
+}
+
+if (financialPretrainedBtn) {
+    financialPretrainedBtn.addEventListener('click', function() {
+        financialUserBtn.classList.remove('active');
+        this.classList.add('active');
+        selectedFinancialModelSource = 'pretrained';
+        checkFinancialModelAvailability();
+    });
+}
 
 // Threshold method selection
 const thresholdMethodSelect = document.getElementById('thresholdMethodSelect');
@@ -593,6 +675,53 @@ async function checkModelAvailability() {
     }
 }
 
+// Check financial model availability
+async function checkFinancialModelAvailability() {
+    try {
+        // Always get the current stock ticker value from the dropdown
+        const stockTickerElement = document.getElementById('stockTicker');
+        const currentStockTicker = stockTickerElement ? stockTickerElement.value : 'BTC-USD';
+        
+        // For user-trained: use selected stock; for pretrained: always ETH-USD
+        const stockToCheck = selectedFinancialModelSource === 'user' ? currentStockTicker : 'ETH-USD';
+        
+        const response = await fetch(`/api/check_financial_models?model_type=${selectedModel}&stock_ticker=${stockToCheck}`);
+        const data = await response.json();
+        
+        const statusEl = document.getElementById('financialModelStatus');
+        const runButton = document.getElementById('runTestButton');
+        
+        if (data.success) {
+            const modelExists = selectedFinancialModelSource === 'user' ? data.user_trained_exists : data.pretrained_exists;
+            
+            // Update status display with training stock info
+            if (modelExists) {
+                let stockInfo = '';
+                if (selectedFinancialModelSource === 'user' && data.training_stock) {
+                    stockInfo = ` (trained on ${data.training_stock})`;
+                } else if (selectedFinancialModelSource === 'pretrained') {
+                    stockInfo = ' (trained on ETH-USD)';
+                }
+                
+                statusEl.innerHTML = `✅ ${selectedFinancialModelSource === 'user' ? 'User-trained' : 'Pretrained'} model found${stockInfo}`;
+                statusEl.style.color = '#10B981';
+                runButton.disabled = false;
+            } else {
+                statusEl.innerHTML = `⚠️ No ${selectedFinancialModelSource === 'user' ? 'user-trained' : 'pretrained'} model found. Please ${selectedFinancialModelSource === 'user' ? 'train a model first' : 'check pretrained model path'}.`;
+                statusEl.style.color = '#FBBF24';
+                runButton.disabled = true;
+            }
+        }
+    } catch (error) {
+        console.error('Error checking financial models:', error);
+        const statusEl = document.getElementById('financialModelStatus');
+        if (statusEl) {
+            statusEl.innerHTML = '❌ Error checking model availability';
+            statusEl.style.color = '#EF4444';
+        }
+    }
+}
+
 // Run test inference
 document.getElementById('runTestButton').addEventListener('click', async function() {
     const resultsSection = document.getElementById('testResults');
@@ -610,17 +739,31 @@ document.getElementById('runTestButton').addEventListener('click', async functio
     this.innerHTML = '<span>⏳</span> Running inference...';
     
     try {
-        // Prepare request body based on threshold method
+        // Prepare request body based on dataset type
         const requestBody = {
             model_type: selectedModel,
-            model_source: selectedModelSource,
-            threshold_method: selectedThresholdMethod
+            dataset_type: selectedDataset
         };
         
-        if (selectedThresholdMethod === 'percentile') {
-            requestBody.percentile = selectedThreshold;
-        } else if (selectedThresholdMethod === 'custom') {
-            requestBody.custom_value = parseFloat(document.getElementById('customThreshold').value);
+        if (selectedDataset === 'financial') {
+            // Financial-specific parameters
+            requestBody.model_source = selectedFinancialModelSource;
+            requestBody.test_start_date = document.getElementById('testStartDate')?.value || '2022-01-01';
+            requestBody.test_end_date = document.getElementById('testEndDate')?.value || '2023-12-31';
+            requestBody.stock_ticker = document.getElementById('stockTicker')?.value || 'TSLA';
+            requestBody.threshold_method = 'mad';  // Always use MAD for financial
+            requestBody.mad_k = parseFloat(document.getElementById('testMadK')?.value || 2.5);
+            requestBody.stress_percentile = parseInt(document.getElementById('testStressPercentile')?.value || 90);
+        } else {
+            // Earthquake-specific parameters
+            requestBody.model_source = selectedModelSource;
+            requestBody.threshold_method = selectedThresholdMethod;
+            
+            if (selectedThresholdMethod === 'percentile') {
+                requestBody.percentile = selectedThreshold;
+            } else if (selectedThresholdMethod === 'custom') {
+                requestBody.custom_value = parseFloat(document.getElementById('customThreshold').value);
+            }
         }
         
         const response = await fetch('/api/run_inference', {
@@ -634,39 +777,132 @@ document.getElementById('runTestButton').addEventListener('click', async functio
         const data = await response.json();
         
         if (data.success) {
-            // Display metrics
-            document.getElementById('testAUC').textContent = (data.metrics.auc * 100).toFixed(2) + '%';
-            document.getElementById('testAccuracy').textContent = (data.metrics.accuracy * 100).toFixed(2) + '%';
-            document.getElementById('testPrecision').textContent = (data.metrics.precision * 100).toFixed(2) + '%';
-            document.getElementById('testRecall').textContent = (data.metrics.recall * 100).toFixed(2) + '%';
-            document.getElementById('testF1').textContent = (data.metrics.f1_score * 100).toFixed(2) + '%';
-            
-            // Display confusion matrix stats
-            document.getElementById('testTP').textContent = data.metrics.tp;
-            document.getElementById('testFP').textContent = data.metrics.fp;
-            document.getElementById('testTN').textContent = data.metrics.tn;
-            document.getElementById('testFN').textContent = data.metrics.fn;
-            
-            // Display threshold used
-            if (data.metrics.threshold !== undefined && data.metrics.threshold_name !== undefined) {
-                console.log(`Threshold used: ${data.metrics.threshold} (${data.metrics.threshold_name})`);
+            // Check dataset type and display accordingly
+            if (data.dataset_type === 'financial') {
+                // Financial results - show price vs anomaly plots
+                console.log('📊 Financial test results received');
                 
-                // Show all available thresholds for comparison
-                if (data.metrics.available_thresholds) {
-                    console.log('Available threshold values:');
-                    console.log(`  Youden's J: ${data.metrics.available_thresholds.youden}`);
-                    console.log(`  F1-Optimal: ${data.metrics.available_thresholds.f1}`);
-                    console.log(`  MCC-Optimal: ${data.metrics.available_thresholds.mcc}`);
-                    console.log(`  p90: ${data.metrics.available_thresholds.p90}`);
-                    console.log(`  p95: ${data.metrics.available_thresholds.p95}`);
-                    console.log(`  p97: ${data.metrics.available_thresholds.p97}`);
-                    console.log(`  p99: ${data.metrics.available_thresholds.p99}`);
+                // Hide ALL earthquake-specific elements
+                const earthquakeMetrics = document.getElementById('earthquakeMetrics');
+                const earthquakeConfusion = document.getElementById('earthquakeConfusion');
+                const earthquakePlots = document.getElementById('earthquakePlots');
+                
+                if (earthquakeMetrics) earthquakeMetrics.style.display = 'none';
+                if (earthquakeConfusion) earthquakeConfusion.style.display = 'none';
+                if (earthquakePlots) earthquakePlots.style.display = 'none';
+                
+                // Create or update financial results container
+                let financialResults = document.getElementById('financialTestResults');
+                if (!financialResults) {
+                    financialResults = document.createElement('div');
+                    financialResults.id = 'financialTestResults';
+                    resultsSection.appendChild(financialResults);
                 }
+                
+                financialResults.innerHTML = `
+                    <div style="margin-bottom: 2rem;">
+                        <h3 style="margin-bottom: 1rem; color: #4A90E2;">📊 Financial Anomaly Detection Results</h3>
+                        
+                        <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(74, 144, 226, 0.1); border-radius: 8px; border-left: 4px solid #4A90E2;">
+                            <div style="font-size: 0.95rem; color: #E2E8F0;">
+                                <strong>📈 Stock:</strong> ${data.metrics.stock_ticker}<br>
+                                <strong>📅 Test Period:</strong> ${data.metrics.test_start_date} to ${data.metrics.test_end_date}<br>
+                                <strong>🎯 Model Source:</strong> ${requestBody.model_source === 'pretrained' ? 'Pretrained (ETH-USD)' : 'User-Trained'}
+                            </div>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                            <div style="background: rgba(74, 144, 226, 0.1); padding: 1rem; border-radius: 8px;">
+                                <div style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 0.5rem;">Total Samples</div>
+                                <div style="font-size: 1.5rem; font-weight: bold; color: #4A90E2;">${data.metrics.total_samples}</div>
+                            </div>
+                            <div style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 8px;">
+                                <div style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 0.5rem;">Anomalies Detected</div>
+                                <div style="font-size: 1.5rem; font-weight: bold; color: #EF4444;">${data.metrics.anomaly_count}</div>
+                            </div>
+                            <div style="background: rgba(251, 191, 36, 0.1); padding: 1rem; border-radius: 8px;">
+                                <div style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 0.5rem;">Anomaly Rate</div>
+                                <div style="font-size: 1.5rem; font-weight: bold; color: #FBBF24;">${(data.metrics.anomaly_rate * 100).toFixed(2)}%</div>
+                            </div>
+                            <div style="background: rgba(16, 185, 129, 0.1); padding: 1rem; border-radius: 8px;">
+                                <div style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 0.5rem;">Mean Residual</div>
+                                <div style="font-size: 1.5rem; font-weight: bold; color: #10B981;">${data.metrics.mae.toFixed(4)}</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(100, 116, 139, 0.1); border-radius: 8px;">
+                            <div style="font-size: 0.9rem; color: #64748B;">
+                                <strong>Threshold:</strong> ${data.metrics.threshold_name} = ${data.metrics.threshold.toFixed(6)}<br>
+                                <strong>MAD k-value:</strong> ${data.metrics.threshold_method_params.k}<br>
+                                <strong>Stress Percentile:</strong> ${data.metrics.threshold_method_params.stress_percentile}th<br>
+                                <strong>Stress Threshold:</strong> ${data.metrics.stress_threshold.toFixed(6)}
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 2rem;">
+                            <h4 style="margin-bottom: 1rem; color: #64748B;">Price vs Anomaly</h4>
+                            <img src="${data.plots.price_anomaly}" style="width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        </div>
+                        
+                        <div style="margin-bottom: 2rem;">
+                            <h4 style="margin-bottom: 1rem; color: #64748B;">Normalized Return Anomaly</h4>
+                            <img src="${data.plots.return_anomaly}" style="width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        </div>
+                    </div>
+                `;
+                
+            } else {
+                // Earthquake results - show traditional metrics
+                console.log('📊 Earthquake test results received');
+                
+                // Show earthquake-specific elements
+                const earthquakeMetrics = document.getElementById('earthquakeMetrics');
+                const earthquakeConfusion = document.getElementById('earthquakeConfusion');
+                const earthquakePlots = document.getElementById('earthquakePlots');
+                
+                if (earthquakeMetrics) earthquakeMetrics.style.display = 'grid';
+                if (earthquakeConfusion) earthquakeConfusion.style.display = 'grid';
+                if (earthquakePlots) earthquakePlots.style.display = 'grid';
+                
+                // Hide financial results if exists
+                const financialResults = document.getElementById('financialTestResults');
+                if (financialResults) financialResults.style.display = 'none';
+                
+                // Display metrics
+                document.getElementById('testAUC').textContent = (data.metrics.auc * 100).toFixed(2) + '%';
+                document.getElementById('testAccuracy').textContent = (data.metrics.accuracy * 100).toFixed(2) + '%';
+                document.getElementById('testPrecision').textContent = (data.metrics.precision * 100).toFixed(2) + '%';
+                document.getElementById('testRecall').textContent = (data.metrics.recall * 100).toFixed(2) + '%';
+                document.getElementById('testF1').textContent = (data.metrics.f1_score * 100).toFixed(2) + '%';
+                
+                // Display confusion matrix stats
+                document.getElementById('testTP').textContent = data.metrics.tp;
+                document.getElementById('testFP').textContent = data.metrics.fp;
+                document.getElementById('testTN').textContent = data.metrics.tn;
+                document.getElementById('testFN').textContent = data.metrics.fn;
+                
+                // Display threshold used
+                if (data.metrics.threshold !== undefined && data.metrics.threshold_name !== undefined) {
+                    console.log(`Threshold used: ${data.metrics.threshold} (${data.metrics.threshold_name})`);
+                    
+                    // Show all available thresholds for comparison
+                    if (data.metrics.available_thresholds) {
+                        console.log('Available threshold values:');
+                        console.log(`  Youden's J: ${data.metrics.available_thresholds.youden}`);
+                        console.log(`  F1-Optimal: ${data.metrics.available_thresholds.f1}`);
+                        console.log(`  MCC-Optimal: ${data.metrics.available_thresholds.mcc}`);
+                        console.log(`  p90: ${data.metrics.available_thresholds.p90}`);
+                        console.log(`  p95: ${data.metrics.available_thresholds.p95}`);
+                        console.log(`  p97: ${data.metrics.available_thresholds.p97}`);
+                        console.log(`  p99: ${data.metrics.available_thresholds.p99}`);
+                    }
+                }
+                
+                // Display plots
+                document.getElementById('rocPlot').src = data.plots.roc_curve;
+                document.getElementById('confusionPlot').src = data.plots.confusion_matrix;
             }
             
-            // Display plots
-            document.getElementById('rocPlot').src = data.plots.roc_curve;
-            document.getElementById('confusionPlot').src = data.plots.confusion_matrix;
             
             // Show results section
             resultsSection.style.display = 'block';

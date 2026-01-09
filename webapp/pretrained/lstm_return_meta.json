@@ -1,0 +1,6 @@
+{
+  "window": 32,
+  "split_ratio": 0.7,
+  "task": "LSTM log-return next-step forecasting",
+  "anomaly_method": "residual + percentile threshold"
+}

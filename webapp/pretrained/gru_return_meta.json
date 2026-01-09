@@ -1,0 +1,8 @@
+{
+  "model": "GRU",
+  "window": 32,
+  "split_ratio": 0.7,
+  "task": "log-return next-step forecasting",
+  "anomaly_method": "residual percentile",
+  "threshold_percentile": 97
+}

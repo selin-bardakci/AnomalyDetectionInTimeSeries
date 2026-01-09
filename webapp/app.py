@@ -45,7 +45,7 @@ EXISTING_TEST_DATA = '../data/custom_window_test.npz'
 
 # Training data sources (hardcoded - no upload needed)
 TRAINING_DATA_SOURCES = {
-    'earthquake': 'trainData/z_channel_train.pkl',
+    'earthquake': 'trainData/z_channel_train_demo.pkl',
     'financial': 'trainData/financial_train.pkl'  # Add financial data here if available
 }
 
@@ -270,7 +270,7 @@ def train_model_background(training_data_path, model_type, dataset_type, lookbac
         # Handle financial vs earthquake data differently
         if dataset_type == 'financial':
             # Financial data: fetch dynamically via yfinance
-            train_scaled, test_scaled, window = prepare_financial_data_dynamic(stock_ticker, start_date, end_date, lookback=32)
+            train_scaled, test_scaled, window, FEATURES = prepare_financial_data_dynamic(stock_ticker, start_date, end_date, lookback=32)
             
             # Create windows for forecasting
             X_train, y_train = make_windows_multifeat(train_scaled, window, target_col=0)
@@ -404,6 +404,7 @@ def train_model_background(training_data_path, model_type, dataset_type, lookbac
                 'split_ratio': 0.7,
                 'features': FEATURES,
                 'model_type': model_type,
+                'stock_ticker': stock_ticker,
                 'dataset': financial_dataset
             }
             
@@ -412,67 +413,8 @@ def train_model_background(training_data_path, model_type, dataset_type, lookbac
                 json.dump(test_metadata, f, indent=2)
             print(f"   ✓ Metadata saved to {metadata_path}")
             
-            # 3) Compute MAD threshold from training residuals
-            # Need to normalize residuals by volatility first
-            # Load original data to get rolling_std_30
-            csv_files = {
-                'tsla': 'trainData/TSLA_2019-2021_pandemic.csv',
-                'yfinance': 'trainData/yfinance_clean.csv'
-            }
-            csv_path = csv_files.get(financial_dataset, csv_files['tsla'])
-            
-            if financial_dataset == 'tsla':
-                df_orig = pd.read_csv(csv_path, header=0)
-                df_orig = df_orig.iloc[1:].reset_index(drop=True)
-                df_orig = df_orig.rename(columns={'Price': 'Date'})
-                df_orig['Date'] = pd.to_datetime(df_orig['Date'], errors='coerce')
-                df_orig['Close'] = pd.to_numeric(df_orig['Close'], errors='coerce')
-                df_orig = df_orig[['Date', 'Close']].dropna().reset_index(drop=True)
-            else:
-                df_orig = pd.read_csv(csv_path)
-                df_orig['Datetime'] = pd.to_datetime(df_orig['Datetime'])
-                df_orig = df_orig.rename(columns={'Datetime': 'Date'})
-                df_orig = df_orig[['Date', 'Close']].dropna().reset_index(drop=True)
-            
-            # Recompute features
-            df_orig["log_return"] = np.log(df_orig["Close"] / df_orig["Close"].shift(1))
-            df_orig["rolling_std_30"] = df_orig["log_return"].rolling(30).std()
-            df_orig = df_orig.dropna().reset_index(drop=True)
-            
-            split_idx_orig = int(len(df_orig) * 0.7)
-            std30_train = df_orig["rolling_std_30"].values[:split_idx_orig]
-            std30_train = std30_train[32:]  # Skip window
-            
-            # Normalize residuals
-            norm_res_tr = res_tr / (std30_train + 1e-8)
-            
-            # Compute MAD threshold (k=2.5)
-            def mad_threshold(residuals, k=2.5):
-                med = np.median(residuals)
-                mad = np.median(np.abs(residuals - med)) + 1e-12
-                return med + k * 1.4826 * mad
-            
-            thr = mad_threshold(norm_res_tr, k=2.5)
-            
-            # Save threshold
-            threshold_path = f'models/{model_type}_financial_{financial_dataset}_threshold.txt'
-            with open(threshold_path, 'w') as f:
-                f.write(str(thr))
-            print(f"   ✓ MAD Threshold (k=2.5): {thr:.8f}")
-            print(f"   ✓ Threshold saved to {threshold_path}")
-            
-            # Save recommended parameters
-            anomaly_params = {
-                'mad_k': 2.5,
-                'stress_percentile': 90,
-                'threshold_value': float(thr),
-                'anomaly_method': 'residual + stress + MAD'
-            }
-            
-            params_path = f'models/{model_type}_financial_{financial_dataset}_params.json'
-            with open(params_path, 'w') as f:
-                json.dump(anomaly_params, f, indent=2)
-            print(f"   ✓ Anomaly params saved to {params_path}")
+            # Threshold will be computed dynamically during inference based on user's chosen k value
+            print(f"   ℹ️ Threshold will be computed dynamically during inference")
             print(f"\n{'='*60}\n")
         
         training_state['is_training'] = False
@@ -494,9 +436,10 @@ def training_status():
     # Log the status for debugging
     if training_state['is_training'] and training_state['history']['loss']:
         print(f"📊 Status update - Epoch: {training_state['current_epoch']}/{training_state['total_epochs']}, Loss history length: {len(training_state['history']['loss'])}")
+    elif not training_state['is_training']:
+        print(f"✅ Training complete - returning final state")
     
-    print(f"  🔍 API reading training state ID: {id(training_state)}, History ID: {id(training_state['history'])}")
-    print(f"  🔍 Current epoch: {training_state['current_epoch']}, History: {training_state['history']}")
+    print(f"  🔍 is_training: {training_state['is_training']}, progress: {training_state['progress']}%")
     
     return jsonify(training_state)
 
@@ -758,21 +701,67 @@ def prepare_financial_data_from_csv(dataset_name, lookback=32):
 def prepare_financial_data_dynamic(stock_ticker, start_date, end_date, lookback=32):
     """Fetch and prepare financial data dynamically via yfinance"""
     import yfinance as yf
+    from datetime import datetime, timedelta
     
     print(f"📊 Fetching data for {stock_ticker} from {start_date} to {end_date}...")
     
-    # Fetch data from yfinance
-    df = yf.download(stock_ticker, start=start_date, end=end_date, progress=False)
-    
-    if df.empty:
-        raise ValueError(f"No data found for {stock_ticker} in date range {start_date} to {end_date}")
-    
-    print(f"   ✓ Downloaded {len(df)} records")
-    
-    # Reset index to have Date as column
-    df = df.reset_index()
-    df = df.rename(columns={'Date': 'Date'})
-    df = df[['Date', 'Close']].dropna().reset_index(drop=True)
+    try:
+        # Add retry logic with timeout
+        import time
+        max_retries = 2
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"   Attempt {attempt + 1}/{max_retries}...")
+                
+                # Use download function without timeout to avoid DNS issues
+                df = yf.download(stock_ticker, start=start_date, end=end_date, progress=False)
+                
+                if df is not None and not df.empty:
+                    break
+                    
+                if attempt < max_retries - 1:
+                    print(f"   ⚠️ Empty data, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    raise ValueError(f"No data found after {max_retries} attempts")
+                    
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"   ⚠️ Error: {str(e)}, retrying...")
+                    time.sleep(retry_delay)
+                else:
+                    raise
+        
+        if df is None or df.empty:
+            raise ValueError(f"No data found for {stock_ticker} in date range {start_date} to {end_date}")
+        
+        print(f"   ✓ Downloaded {len(df)} records")
+        
+        # Reset index to have Date as column
+        df = df.reset_index()
+        
+        # Handle column names
+        if 'Date' not in df.columns:
+            if 'Datetime' in df.columns:
+                df = df.rename(columns={'Datetime': 'Date'})
+            elif hasattr(df.index, 'name') and df.index.name in ['Date', 'Datetime']:
+                # Already reset, just rename if needed
+                pass
+        
+        # Check if Close column exists
+        if 'Close' not in df.columns:
+            print(f"   ❌ Available columns: {df.columns.tolist()}")
+            raise ValueError(f"'Close' column not found. Available: {df.columns.tolist()}")
+        
+        df = df[['Date', 'Close']].dropna().reset_index(drop=True)
+        
+    except Exception as e:
+        import traceback
+        print(f"   ❌ yfinance error: {str(e)}")
+        print(f"   ❌ Traceback: {traceback.format_exc()}")
+        raise ValueError(f"Failed to download data for {stock_ticker}: {str(e)}")
     
     print(f"   ✓ Cleaned data: {len(df)} records")
     
@@ -808,7 +797,7 @@ def prepare_financial_data_dynamic(stock_ticker, start_date, end_date, lookback=
     joblib.dump(scaler, scaler_path)
     print(f"   ✓ Scaler saved to {scaler_path}")
     
-    return train_scaled, test_scaled, lookback
+    return train_scaled, test_scaled, lookback, FEATURES
 
 
 def make_windows_multifeat(X, window, target_col=0):
@@ -1018,61 +1007,131 @@ def build_itransformer_model(lookback=128, learning_rate=0.001):
 # TEST INFERENCE ENDPOINTS
 # ============================================================
 
-def run_financial_inference(model_type, stock_ticker, start_date, end_date, threshold_method, 
-                            mad_k, stress_percentile, custom_value, percentile):
+def run_financial_inference(model_type, model_source, stock_ticker, start_date, end_date, 
+                            threshold_method, mad_k, stress_percentile, custom_value, percentile):
     """Run financial anomaly detection inference with dynamic date range"""
     try:
-        # Load model - check user-trained first, then pretrained
-        user_trained_path = f'models/{model_type}_financial_best.keras'
-        pretrained_path = f'pretrained/{model_type}_financial_best.keras'
-        
-        if os.path.exists(user_trained_path):
-            model_path = user_trained_path
-            print(f"📂 Loading user-trained model from: {model_path}")
-        elif os.path.exists(pretrained_path):
-            model_path = pretrained_path
-            print(f"📂 Loading pretrained model from: {model_path}")
+        # Determine which stock to use based on model source
+        # Pretrained models were trained on ETH-USD, user-trained uses the training stock from metadata
+        if model_source == 'pretrained':
+            test_stock_ticker = 'ETH-USD'
+            print(f"🔧 Using pretrained model - testing on ETH-USD (pretrained data)")
         else:
+            # For user-trained models, ALWAYS use the training stock from metadata
+            metadata_path = f'models/{model_type}_financial_dynamic_meta.json'
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                test_stock_ticker = metadata.get('stock_ticker', 'BTC-USD')
+                print(f"🔧 Using user-trained model - testing on {test_stock_ticker} (from training metadata)")
+            else:
+                # Fallback if no metadata
+                test_stock_ticker = 'BTC-USD'
+                print(f"⚠️ No metadata found, defaulting to BTC-USD")
+        
+        # Load model based on source
+        if model_source == 'user':
+            model_path = f'models/{model_type}_financial_best.keras'
+            
+            # Load metadata to get the actual training stock
+            metadata_path = f'models/{model_type}_financial_dynamic_meta.json'
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                training_stock = metadata.get('stock_ticker', stock_ticker)
+                print(f"📊 Model was trained on: {training_stock}")
+            else:
+                # Fallback to selected stock if no metadata
+                training_stock = stock_ticker
+                print(f"⚠️ No metadata found, assuming trained on: {training_stock}")
+            
+            # Use the TRAINING stock to load the correct scaler
+            scaler_name = training_stock.replace('-', '_').lower()
+            scaler_path = f'models/financial_{scaler_name}_scaler.joblib'
+            
+        else:  # pretrained
+            model_path = f'pretrained/{model_type}_financial_best.keras'
+            scaler_path = f'pretrained/{model_type}_return_scaler.joblib'
+        
+        if not os.path.exists(model_path):
             return jsonify({
                 'success': False,
-                'error': f'Model not found. Please train the model first or place pretrained model in pretrained/ folder.'
+                'error': f'Model not found at {model_path}'
             }), 404
         
         model = load_model(model_path)
-        print("✅ Model loaded")
+        print(f"✅ Model loaded from {model_path}")
+        model = load_model(model_path)
+        print(f"✅ Model loaded from {model_path}")
         
-        # Load scaler (try stock-specific first, then generic)
-        scaler_path = f'models/financial_{stock_ticker.replace("-", "_").lower()}_scaler.joblib'
-        if not os.path.exists(scaler_path):
-            # Try generic scaler
-            scaler_path = 'models/financial_tsla_scaler.joblib'
-        
+        # Load scaler
         if not os.path.exists(scaler_path):
             return jsonify({
                 'success': False,
-                'error': f'Scaler not found. Please train the model first.'
+                'error': f'Scaler not found at {scaler_path}'
             }), 404
         
         scaler = joblib.load(scaler_path)
         print(f"✅ Scaler loaded from {scaler_path}")
         
-        # Fetch data dynamically for test period
+        # Fetch data dynamically for test period using the appropriate stock
         import yfinance as yf
-        print(f"📊 Fetching test data for {stock_ticker} from {start_date} to {end_date}...")
-        df = yf.download(stock_ticker, start=start_date, end=end_date, progress=False)
+        import time
+        print(f"📊 Fetching test data for {test_stock_ticker} from {start_date} to {end_date}...")
         
-        if df.empty:
+        try:
+            # Use download with retry logic - increased retries and delay for rate limiting
+            max_retries = 3
+            retry_delay = 2  # Increased from 1 to 2 seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    print(f"   Attempt {attempt + 1}/{max_retries}...")
+                    df = yf.download(test_stock_ticker, start=start_date, end=end_date, progress=False)
+                    
+                    if df is not None and not df.empty:
+                        break
+                        
+                    if attempt < max_retries - 1:
+                        print(f"   ⚠️ Empty data, waiting {retry_delay}s before retry...")
+                        time.sleep(retry_delay)
+                    else:
+                        raise ValueError(f"No data found after {max_retries} attempts")
+                        
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"   ⚠️ Error: {str(e)}, waiting {retry_delay}s before retry...")
+                        time.sleep(retry_delay)
+                    else:
+                        raise
+            
+            if df is None or df.empty:
+                raise ValueError(f"No data returned for {test_stock_ticker} in date range {start_date} to {end_date}")
+            
+            # Reset index to have Date as column
+            df = df.reset_index()
+            
+            # Handle different column names from yfinance
+            if 'Date' not in df.columns:
+                if 'Datetime' in df.columns:
+                    df = df.rename(columns={'Datetime': 'Date'})
+            
+            # Check if Close column exists
+            if 'Close' not in df.columns:
+                print(f"Available columns: {df.columns.tolist()}")
+                raise ValueError(f"'Close' column not found in data")
+            
+            df = df[['Date', 'Close']].dropna().reset_index(drop=True)
+            print(f"✅ Downloaded {len(df)} records for {test_stock_ticker}")
+            
+        except Exception as e:
+            import traceback
+            print(f"❌ yfinance error: {str(e)}")
+            print(f"❌ Traceback: {traceback.format_exc()}")
             return jsonify({
                 'success': False,
-                'error': f'No data found for {stock_ticker} in date range'
+                'error': f'Failed to download data for {test_stock_ticker}: {str(e)}'
             }), 404
-        
-        # Reset index to have Date as column
-        df = df.reset_index()
-        df = df.rename(columns={'Date': 'Date'})
-        df = df[['Date', 'Close']].dropna().reset_index(drop=True)
-        
-        print(f"📊 Loaded {len(df)} records for {stock_ticker}")
         
         # Feature engineering
         df["log_return"] = np.log(df["Close"] / df["Close"].shift(1))
@@ -1122,48 +1181,53 @@ def run_financial_inference(model_type, stock_ticker, start_date, end_date, thre
         # Normalize residuals by volatility
         norm_res_te = res_te / (std30_test + eps)
         
-        # Determine threshold
-        if threshold_method == 'mad':
-            # Load recommended MAD threshold
-            threshold_path = f'models/{model_type}_financial_{financial_dataset}_threshold.txt'
-            if os.path.exists(threshold_path):
-                with open(threshold_path, 'r') as f:
-                    recommended_threshold = float(f.read().strip())
-                threshold = recommended_threshold
-                threshold_name = f"MAD (k={mad_k}, Recommended)"
-                print(f"📊 Using recommended MAD threshold: {threshold:.8f}")
-            else:
-                # Compute MAD from training data
-                print("⚠️ Recommended threshold not found, computing from training data...")
-                train_feat = df[FEATURES].values[:split_idx]
-                train_scaled = scaler.transform(train_feat)
-                X_train, y_train = make_windows_multifeat(train_scaled, WINDOW, target_col=0)
-                yhat_tr = model.predict(X_train, verbose=0).ravel()
-                res_tr = np.abs(y_train - yhat_tr)
-                
-                std30_train = df["rolling_std_30"].values[:split_idx]
-                std30_train = std30_train[WINDOW:]
-                norm_res_tr = res_tr / (std30_train + eps)
-                
-                def mad_threshold(residuals, k=2.5):
-                    med = np.median(residuals)
-                    mad = np.median(np.abs(residuals - med)) + 1e-12
-                    return med + k * 1.4826 * mad
-                
-                threshold = mad_threshold(norm_res_tr, k=mad_k)
-                threshold_name = f"MAD (k={mad_k}, Computed)"
-                print(f"📊 Computed MAD threshold: {threshold:.8f}")
-        elif threshold_method == 'percentile':
-            threshold = float(np.percentile(norm_res_te, percentile))
-            threshold_name = f"Percentile p{percentile}"
-        elif threshold_method == 'custom':
-            threshold = float(custom_value)
-            threshold_name = "Custom Threshold"
-        else:
-            threshold = float(np.percentile(norm_res_te, 95))
-            threshold_name = "Percentile p95 (Default)"
+        # For financial data, ALWAYS use MAD threshold (like the pipeline)
+        # Need to compute on TRAINING data to get threshold
+        print("📊 Computing MAD threshold from training data...")
         
-        print(f"📊 Selected threshold: {threshold_name} = {threshold:.8f}")
+        # We need training data to compute the threshold
+        # Use a split_ratio to separate train from test within the test period
+        # OR use pretrained threshold if available
+        
+        # Check for pretrained threshold first
+        if model_source == 'pretrained':
+            threshold_path = f'pretrained/{model_type}_threshold_mad.txt'
+        else:
+            threshold_path = f'models/{model_type}_financial_threshold_mad.txt'
+        
+        print(f"📊 Looking for threshold file: {threshold_path}")
+        
+        if os.path.exists(threshold_path):
+            with open(threshold_path, 'r') as f:
+                threshold = float(f.read().strip())
+            threshold_name = f"MAD (k={mad_k}, from training)"
+            print(f"📊 Using saved MAD threshold from {threshold_path}: {threshold:.8f}")
+        else:
+            # Compute MAD from current test data (split it into pseudo-train/test)
+            # Use first 70% as "training" to compute threshold
+            print("⚠️ No saved threshold, computing from data split...")
+            pseudo_split = int(len(df) * 0.7)
+            
+            train_feat = df[FEATURES].values[:pseudo_split]
+            train_scaled_pseudo = scaler.transform(train_feat)
+            X_train_pseudo, y_train_pseudo = make_windows_multifeat(train_scaled_pseudo, WINDOW, target_col=0)
+            yhat_tr = model.predict(X_train_pseudo, verbose=0).ravel()
+            res_tr = np.abs(y_train_pseudo - yhat_tr)
+            
+            std30_train = df["rolling_std_30"].values[:pseudo_split]
+            std30_train = std30_train[WINDOW:]
+            norm_res_tr = res_tr / (std30_train + eps)
+            
+            def mad_threshold_fn(residuals, k=2.5):
+                med = np.median(residuals)
+                mad = np.median(np.abs(residuals - med)) + 1e-12
+                return med + k * 1.4826 * mad
+            
+            threshold = mad_threshold_fn(norm_res_tr, k=mad_k)
+            threshold_name = f"MAD (k={mad_k})"
+            print(f"📊 Computed MAD threshold: {threshold:.8f}")
+        
+        print(f"📊 Threshold: {threshold_name} = {threshold:.8f}")
         
         # Apply threshold with stress mask
         raw_anomaly = (norm_res_te > threshold).astype(int)
@@ -1173,28 +1237,24 @@ def run_financial_inference(model_type, stock_ticker, start_date, end_date, thre
         print(f"📊 Final anomaly rate (with stress): {anomaly.mean():.3f}")
         print(f"📊 Anomaly count: {anomaly.sum()} / {len(anomaly)}")
         
-        # Filter for 2021 data
+        # Use full test date range (no filtering)
         dates_test_dt = pd.to_datetime(dates_test)
-        mask_2021 = (dates_test_dt >= "2021-01-01") & (dates_test_dt < "2022-01-01")
         
-        dates_2021 = dates_test_dt[mask_2021]
-        price_2021 = price_test[mask_2021]
-        anomaly_2021 = anomaly[mask_2021]
-        norm_return_2021 = y_test[mask_2021]
+        print(f"📊 Test period: {len(dates_test_dt)} points, {anomaly.sum()} anomalies")
+        print(f"📊 Date range: {dates_test_dt.min()} to {dates_test_dt.max()}")
         
-        print(f"📊 2021 data: {len(dates_2021)} points, {anomaly_2021.sum()} anomalies")
-        
-        # Generate price vs anomaly plot
+        # Generate price vs anomaly plot (full test period)
         plt.figure(figsize=(16, 5))
-        plt.plot(dates_2021, price_2021, label="Price", linewidth=2, color='#4A90E2')
+        plt.plot(dates_test_dt, price_test, label="Price", linewidth=2, color='#4A90E2')
         
         # Mark anomalies
-        idx_2021 = np.where(anomaly_2021 == 1)[0]
-        if len(idx_2021) > 0:
-            plt.scatter(dates_2021[idx_2021], price_2021[idx_2021], 
+        idx_anomaly = np.where(anomaly == 1)[0]
+        if len(idx_anomaly) > 0:
+            plt.scatter(dates_test_dt[idx_anomaly], price_test[idx_anomaly], 
                        color="red", s=50, label="Anomaly", zorder=5, marker='o', edgecolors='darkred', linewidths=1.5)
         
-        plt.title(f"Price vs Anomaly Detection ({model_type.upper()}, 2021)", fontsize=14, fontweight='bold')
+        
+        plt.title(f"Price vs Anomaly Detection ({model_type.upper()}, {start_date} to {end_date})", fontsize=14, fontweight='bold')
         plt.xlabel("Date", fontsize=12)
         plt.ylabel("Price ($)", fontsize=12)
         plt.legend(fontsize=11)
@@ -1207,13 +1267,13 @@ def run_financial_inference(model_type, stock_ticker, start_date, end_date, thre
         price_plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
         plt.close()
         
-        # Generate norm return plot
+        # Generate norm return plot (full test period)
         plt.figure(figsize=(16, 4))
-        plt.plot(dates_2021, norm_return_2021, label="Normalized Return", alpha=0.7, linewidth=1.5, color='#64748B')
-        if len(idx_2021) > 0:
-            plt.scatter(dates_2021[idx_2021], norm_return_2021[idx_2021], 
+        plt.plot(dates_test_dt, y_test, label="Normalized Return", alpha=0.7, linewidth=1.5, color='#64748B')
+        if len(idx_anomaly) > 0:
+            plt.scatter(dates_test_dt[idx_anomaly], y_test[idx_anomaly], 
                        color="red", s=30, label="Anomaly", zorder=5)
-        plt.title(f"Normalized Return Anomaly Detection ({model_type.upper()})", fontsize=14, fontweight='bold')
+        plt.title(f"Normalized Return Anomaly Detection ({model_type.upper()}, {start_date} to {end_date})", fontsize=14, fontweight='bold')
         plt.xlabel("Date", fontsize=12)
         plt.ylabel("Normalized Return", fontsize=12)
         plt.legend(fontsize=11)
@@ -1229,18 +1289,21 @@ def run_financial_inference(model_type, stock_ticker, start_date, end_date, thre
         print(f"✅ Inference complete!")
         print(f"{'='*60}\n")
         
-        # Prepare chart data for frontend
+        # Prepare chart data for frontend (full test period)
         chart_data = {
-            'dates': dates_2021.strftime('%Y-%m-%d').tolist(),
-            'prices': price_2021.tolist(),
-            'anomalies': anomaly_2021.tolist(),
-            'returns': norm_return_2021.tolist()
+            'dates': dates_test_dt.strftime('%Y-%m-%d').tolist(),
+            'prices': price_test.tolist(),
+            'anomalies': anomaly.tolist(),
+            'returns': y_test.tolist()
         }
         
         return jsonify({
             'success': True,
             'dataset_type': 'financial',
             'metrics': {
+                'stock_ticker': test_stock_ticker,  # Add the ACTUAL stock that was tested
+                'test_start_date': start_date,
+                'test_end_date': end_date,
                 'total_samples': int(len(anomaly)),
                 'anomaly_count': int(anomaly.sum()),
                 'anomaly_rate': float(anomaly.mean()),
@@ -1253,9 +1316,7 @@ def run_financial_inference(model_type, stock_ticker, start_date, end_date, thre
                     'k': float(mad_k),
                     'stress_percentile': int(stress_percentile)
                 },
-                'mae': float(res_te.mean()),
-                'samples_2021': int(len(dates_2021)),
-                'anomalies_2021': int(anomaly_2021.sum())
+                'mae': float(res_te.mean())
             },
             'plots': {
                 'price_anomaly': f'data:image/png;base64,{price_plot_base64}',
@@ -1311,6 +1372,68 @@ def check_models():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/check_financial_models', methods=['GET'])
+def check_financial_models():
+    """Check which financial models are available (user-trained and pretrained)"""
+    try:
+        model_type = request.args.get('model_type', 'cnn')
+        stock_ticker = request.args.get('stock_ticker', 'TSLA')
+        
+        # Check user-trained model
+        user_model_path = f'models/{model_type}_financial_best.keras'
+        user_trained_exists = os.path.exists(user_model_path)
+        
+        # Get training stock from metadata for user-trained models
+        training_stock = None
+        if user_trained_exists:
+            metadata_path = f'models/{model_type}_financial_dynamic_meta.json'
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                training_stock = metadata.get('stock_ticker')
+        
+        # Check user-trained scaler (use training stock if available)
+        if training_stock:
+            scaler_name = training_stock.replace('-', '_').lower()
+        else:
+            scaler_name = stock_ticker.replace('-', '_').lower()
+        user_scaler_path = f'models/financial_{scaler_name}_scaler.joblib'
+        user_scaler_exists = os.path.exists(user_scaler_path)
+        
+        # Check pretrained model
+        pretrained_model_path = f'pretrained/{model_type}_financial_best.keras'
+        pretrained_exists = os.path.exists(pretrained_model_path)
+        
+        # Check pretrained scaler (generic naming: {model}_return_scaler.joblib)
+        pretrained_scaler_path = f'pretrained/{model_type}_return_scaler.joblib'
+        pretrained_scaler_exists = os.path.exists(pretrained_scaler_path)
+        
+        # Check pretrained metadata and thresholds
+        pretrained_meta_path = f'pretrained/{model_type}_return_meta.json'
+        pretrained_meta_exists = os.path.exists(pretrained_meta_path)
+        pretrained_threshold_mad = f'pretrained/{model_type}_threshold_mad.txt'
+        pretrained_threshold_mad_exists = os.path.exists(pretrained_threshold_mad)
+        
+        return jsonify({
+            'success': True,
+            'training_stock': training_stock,  # Add this so frontend knows which stock was used for training
+            'user_trained_exists': user_trained_exists and user_scaler_exists,
+            'user_trained': {
+                'model_path': user_model_path if user_trained_exists else None,
+                'scaler_path': user_scaler_path if user_scaler_exists else None
+            },
+            'pretrained_exists': pretrained_exists and pretrained_scaler_exists,
+            'pretrained': {
+                'model_path': pretrained_model_path if pretrained_exists else None,
+                'scaler_path': pretrained_scaler_path if pretrained_scaler_exists else None,
+                'meta_path': pretrained_meta_path if pretrained_meta_exists else None,
+                'threshold_mad_path': pretrained_threshold_mad if pretrained_threshold_mad_exists else None
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/run_inference', methods=['POST'])
 def run_inference():
     """Run inference on test data and return metrics with advanced threshold options"""
@@ -1322,8 +1445,8 @@ def run_inference():
         
         # Financial-specific parameters
         stock_ticker = data.get('stock_ticker', 'TSLA')
-        start_date = data.get('start_date', '2019-01-01')
-        end_date = data.get('end_date', '2021-12-31')
+        test_start_date = data.get('test_start_date', '2022-01-01')
+        test_end_date = data.get('test_end_date', '2023-12-31')
         
         threshold_method = data.get('threshold_method', 'percentile')  # 'percentile', 'youden', 'f1', 'mcc', 'custom', 'mad'
         percentile = data.get('percentile', 95)  # For percentile method
@@ -1339,7 +1462,7 @@ def run_inference():
         print(f"Dataset type: {dataset_type}")
         if dataset_type == 'financial':
             print(f"Stock ticker: {stock_ticker}")
-            print(f"Date range: {start_date} to {end_date}")
+            print(f"Test date range: {test_start_date} to {test_end_date}")
         print(f"Threshold method: {threshold_method}")
         if threshold_method == 'percentile':
             print(f"Percentile: p{percentile}")
@@ -1351,8 +1474,8 @@ def run_inference():
         # Handle financial vs earthquake inference differently
         if dataset_type == 'financial':
             return run_financial_inference(
-                model_type, stock_ticker, start_date, end_date, threshold_method,
-                mad_k, stress_percentile, custom_value, percentile
+                model_type, model_source, stock_ticker, test_start_date, test_end_date, 
+                threshold_method, mad_k, stress_percentile, custom_value, percentile
             )
         
         # Continue with earthquake inference...
@@ -1572,4 +1695,4 @@ if __name__ == '__main__':
     os.makedirs('uploads', exist_ok=True)
     os.makedirs('models', exist_ok=True)
     os.makedirs('testData', exist_ok=True)
-    app.run(debug=True, host='0.0.0.0', port=5004)
+    app.run(debug=True, host='0.0.0.0', port=5005)
